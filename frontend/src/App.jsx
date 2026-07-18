@@ -67,6 +67,17 @@ function PinIcon({ size = 14, className }) {
   );
 }
 
+function ShareIcon({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <circle cx="18" cy="5" r="3" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="6" cy="12" r="3" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="18" cy="19" r="3" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M8.6 10.6 15.4 6.4M8.6 13.4 15.4 17.6" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
 function buildRouteSegments(routeData, mode, transitColors) {
   if (!routeData) return null;
 
@@ -229,12 +240,31 @@ export default function App() {
   }
 
   async function handleShareRoute() {
-    if (!shareId) {
-      const newShareId = await createShare(routeNameInput.trim(), selectedPlaces);
-      // history 변수명이 useSearchHistory()의 검색 기록 배열과 겹치므로 반드시 window.history를 써야 한다.
-      const url = new URL(window.location.href);
-      url.searchParams.set('share', newShareId);
-      window.history.pushState({}, '', url);
+    // 이미 공유 중인 링크면(다른 사람이 만든 링크로 들어온 경우 포함) 굳이 매번 네이티브
+    // 공유 시트를 다시 띄우지 않고, 링크/접속인원을 보여주는 패널을 연다.
+    if (shareId) {
+      setShowSharePanel(true);
+      return;
+    }
+
+    const newShareId = await createShare(routeNameInput.trim(), selectedPlaces);
+    // history 변수명이 useSearchHistory()의 검색 기록 배열과 겹치므로 반드시 window.history를 써야 한다.
+    const url = new URL(window.location.href);
+    url.searchParams.set('share', newShareId);
+    window.history.pushState({}, '', url);
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: routeNameInput.trim() || '내 여행 동선',
+          text: '같이 보고 수정할 수 있는 여행 동선을 공유합니다',
+          url: url.toString(),
+        });
+        return;
+      } catch (err) {
+        // 사용자가 공유 시트를 취소한 경우 등은 조용히 무시하고 대체 패널을 보여준다.
+        if (err?.name === 'AbortError') return;
+      }
     }
     setShowSharePanel(true);
   }
@@ -324,9 +354,21 @@ export default function App() {
               <button type="submit">동선 저장</button>
             </form>
           )}
-          <button type="button" className="saved-route-list-btn" onClick={() => setShowSavedRoutes(true)}>
-            저장된 동선{savedRoutes.length > 0 ? ` (${savedRoutes.length})` : ''}
-          </button>
+          <div className="saved-route-row">
+            <button type="button" className="saved-route-list-btn" onClick={() => setShowSavedRoutes(true)}>
+              저장된 동선{savedRoutes.length > 0 ? ` (${savedRoutes.length})` : ''}
+            </button>
+            {(selectedPlaces.length > 0 || shareId) && (
+              <button
+                type="button"
+                className={`share-icon-btn${shareId ? ' active' : ''}`}
+                onClick={handleShareRoute}
+                title={shareId ? `공유 중 · ${connectedCount}명 접속` : '동선 공유하기'}
+              >
+                <ShareIcon />
+              </button>
+            )}
+          </div>
           <SavedRoutesPanel
             visible={showSavedRoutes}
             onClose={() => setShowSavedRoutes(false)}
@@ -335,23 +377,15 @@ export default function App() {
             onDeleteRoute={deleteRoute}
             onRenameRoute={renameRoute}
           />
+          <ShareRoutePanel
+            visible={showSharePanel}
+            onClose={() => setShowSharePanel(false)}
+            shareUrl={shareId ? `${window.location.origin}${window.location.pathname}?share=${shareId}` : ''}
+            connectedCount={connectedCount}
+            loading={shareLoading}
+            error={shareError}
+          />
         </div>
-
-        {(selectedPlaces.length > 0 || shareId) && (
-          <div className="share-route-trigger">
-            <button type="button" className="share-route-btn" onClick={handleShareRoute}>
-              {shareId ? `공유 중 · ${connectedCount}명 접속` : '동선 공유하기'}
-            </button>
-            <ShareRoutePanel
-              visible={showSharePanel}
-              onClose={() => setShowSharePanel(false)}
-              shareUrl={shareId ? `${window.location.origin}${window.location.pathname}?share=${shareId}` : ''}
-              connectedCount={connectedCount}
-              loading={shareLoading}
-              error={shareError}
-            />
-          </div>
-        )}
 
         {selectedPlaces.length >= 2 && (
           <div className="route-detail-trigger">

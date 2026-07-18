@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { loadKakaoShare } from '../loadKakaoShare.js';
 
 // navigator.share()(OS 네이티브 공유 시트)는 카카오톡 같은 인앱브라우저에서 열었을 때
@@ -11,22 +11,24 @@ const SHARE_TARGETS = [
   { key: 'x', label: 'X', bg: '#111', color: '#fff' },
 ];
 
-async function openShareTarget(key, { shareUrl, routeName }) {
+function openShareTarget(key, { shareUrl, routeName }) {
   const title = routeName || '내 여행 동선';
   const text = '같이 보고 수정할 수 있는 여행 동선을 공유합니다';
 
   if (key === 'kakao') {
-    try {
-      const Kakao = await loadKakaoShare();
-      Kakao.Share.sendDefault({
-        objectType: 'text',
-        text: `${title}\n${text}`,
-        link: { mobileWebUrl: shareUrl, webUrl: shareUrl },
-      });
-    } catch (err) {
-      console.error(err);
-      alert('카카오톡 공유를 불러오지 못했습니다.');
+    // Kakao.Share.sendDefault는 "방금 사용자가 눌렀다"는 상태에서 바로 호출돼야
+    // 카카오톡 앱으로 연동된다 — 미리 로드해둔 SDK를 여기서 동기적으로 바로 쓴다.
+    // (클릭 시점에 비동기로 SDK를 불러오면 그 사이 활성화 상태가 풀려 웹으로 빠진다.)
+    if (!window.Kakao || !window.Kakao.isInitialized()) {
+      alert('카카오톡 공유 준비 중입니다. 잠시 후 다시 시도해주세요.');
+      loadKakaoShare().catch(console.error);
+      return;
     }
+    window.Kakao.Share.sendDefault({
+      objectType: 'text',
+      text: `${title}\n${text}`,
+      link: { mobileWebUrl: shareUrl, webUrl: shareUrl },
+    });
     return;
   }
 
@@ -41,6 +43,11 @@ async function openShareTarget(key, { shareUrl, routeName }) {
 
 export default function ShareRoutePanel({ visible, onClose, shareUrl, routeName, connectedCount, loading, error }) {
   const [copied, setCopied] = useState(false);
+
+  // 패널이 뜨는 시점에 미리 로드해둬야, 실제 버튼을 눌렀을 때 지연 없이 바로 앱 연동이 된다.
+  useEffect(() => {
+    if (visible) loadKakaoShare().catch(console.error);
+  }, [visible]);
 
   if (!visible) return null;
 

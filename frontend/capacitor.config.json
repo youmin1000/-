@@ -3,7 +3,7 @@
   "appName": "한국 여행 플래너",
   "webDir": "dist",
   "server": {
-    "url": "https://REPLACE-WITH-VERCEL-DOMAIN.vercel.app",
+    "url": "https://tripplaner-wine.vercel.app",
     "cleartext": false
   }
 }

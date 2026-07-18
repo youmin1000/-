@@ -69,6 +69,21 @@ jobs:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > frontend/android/app/release.keystore
 
+      # 실제 서명 전에, 디코딩된 keystore 파일과 비밀번호가 서로 맞는지 먼저 확인한다.
+      - name: Verify keystore decodes and opens
+        if: ${{ env.HAS_KEYSTORE == 'true' }}
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ls -la frontend/android/app/release.keystore
+          file frontend/android/app/release.keystore
+          keytool -list -v \
+            -keystore frontend/android/app/release.keystore \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -alias "$ANDROID_KEY_ALIAS"
+
       - name: Build signed release AAB
         if: ${{ env.HAS_KEYSTORE == 'true' }}
         working-directory: frontend/android

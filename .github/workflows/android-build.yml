@@ -5,6 +5,9 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -44,3 +47,15 @@ jobs:
         with:
           name: app-debug-apk
           path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+
+      # zip 없이 폰 브라우저에서 바로 apk를 다운로드할 수 있도록, Actions 아티팩트와 별도로
+      # "android-latest"라는 고정 태그의 Release에 apk 파일을 직접 첨부해 매번 덮어쓴다.
+      - name: Publish APK to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete android-latest --yes --cleanup-tag || true
+          gh release create android-latest \
+            frontend/android/app/build/outputs/apk/debug/app-debug.apk \
+            --title "Android APK (최신)" \
+            --notes "자동 빌드된 최신 APK. 링크를 눌러 apk 파일을 바로 다운로드하세요."

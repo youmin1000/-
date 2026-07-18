@@ -392,6 +392,7 @@ export default function App() {
             visible={showSharePanel}
             onClose={() => setShowSharePanel(false)}
             shareUrl={shareId ? `${window.location.origin}${window.location.pathname}?share=${shareId}` : ''}
+            routeName={remoteName || routeNameInput}
             connectedCount={connectedCount}
             loading={shareLoading}
             error={shareError}

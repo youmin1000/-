@@ -1306,6 +1306,17 @@ body {
   background: #dde9fd;
 }
 
+.share-icon-btn:disabled {
+  background: #d7d9dd;
+  color: #8b8f96;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.share-icon-btn:disabled:hover {
+  background: #d7d9dd;
+}
+
 .share-icon-btn.active {
   background: #3b6ef6;
   color: #fff;

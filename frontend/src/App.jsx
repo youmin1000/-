@@ -239,7 +239,9 @@ export default function App() {
     setShowSavedRoutes(false);
   }
 
-  async function handleShareRoute() {
+  function handleShareRoute() {
+    if (selectedPlaces.length === 0 && !shareId) return;
+
     // 이미 공유 중인 링크면(다른 사람이 만든 링크로 들어온 경우 포함) 굳이 매번 네이티브
     // 공유 시트를 다시 띄우지 않고, 링크/접속인원을 보여주는 패널을 연다.
     if (shareId) {
@@ -247,24 +249,28 @@ export default function App() {
       return;
     }
 
-    const newShareId = await createShare(routeNameInput.trim(), selectedPlaces);
+    // navigator.share()는 클릭 이벤트에서 곧바로(동기적으로) 호출해야 브라우저가 "사용자
+    // 제스처"로 인정해 네이티브 공유 시트(카카오톡 등 앱 아이콘 포함)를 띄워준다. 그 앞에
+    // await로 네트워크 요청을 기다리면 활성화 상태가 풀려 실패하므로, createShare는
+    // 서버 저장을 기다리지 않고 shareId를 즉시 동기적으로 돌려주도록 되어 있다.
+    const newShareId = createShare(routeNameInput.trim(), selectedPlaces);
     // history 변수명이 useSearchHistory()의 검색 기록 배열과 겹치므로 반드시 window.history를 써야 한다.
     const url = new URL(window.location.href);
     url.searchParams.set('share', newShareId);
     window.history.pushState({}, '', url);
 
     if (navigator.share) {
-      try {
-        await navigator.share({
+      navigator
+        .share({
           title: routeNameInput.trim() || '내 여행 동선',
           text: '같이 보고 수정할 수 있는 여행 동선을 공유합니다',
           url: url.toString(),
+        })
+        .catch((err) => {
+          // 사용자가 공유 시트를 취소한 경우 등은 조용히 무시하고, 그 외 실패만 대체 패널로 보여준다.
+          if (err?.name !== 'AbortError') setShowSharePanel(true);
         });
-        return;
-      } catch (err) {
-        // 사용자가 공유 시트를 취소한 경우 등은 조용히 무시하고 대체 패널을 보여준다.
-        if (err?.name === 'AbortError') return;
-      }
+      return;
     }
     setShowSharePanel(true);
   }
@@ -358,16 +364,21 @@ export default function App() {
             <button type="button" className="saved-route-list-btn" onClick={() => setShowSavedRoutes(true)}>
               저장된 동선{savedRoutes.length > 0 ? ` (${savedRoutes.length})` : ''}
             </button>
-            {(selectedPlaces.length > 0 || shareId) && (
-              <button
-                type="button"
-                className={`share-icon-btn${shareId ? ' active' : ''}`}
-                onClick={handleShareRoute}
-                title={shareId ? `공유 중 · ${connectedCount}명 접속` : '동선 공유하기'}
-              >
-                <ShareIcon />
-              </button>
-            )}
+            <button
+              type="button"
+              className={`share-icon-btn${shareId ? ' active' : ''}`}
+              onClick={handleShareRoute}
+              disabled={selectedPlaces.length === 0 && !shareId}
+              title={
+                shareId
+                  ? `공유 중 · ${connectedCount}명 접속`
+                  : selectedPlaces.length === 0
+                    ? '동선을 먼저 추가해주세요'
+                    : '동선 공유하기'
+              }
+            >
+              <ShareIcon />
+            </button>
           </div>
           <SavedRoutesPanel
             visible={showSavedRoutes}

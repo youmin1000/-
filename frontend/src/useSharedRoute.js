@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { createSharedRoute, getSharedRoute, updateSharedRoute, buildSharedRouteWsUrl } from './api.js';
+import { getSharedRoute, updateSharedRoute, buildSharedRouteWsUrl } from './api.js';
 
 const PUSH_DEBOUNCE_MS = 600;
 
@@ -15,27 +15,36 @@ export function useSharedRoute(initialShareId) {
   const [clientId] = useState(() => crypto.randomUUID());
   const wsRef = useRef(null);
   const debounceRef = useRef(null);
+  // createShare()로 방금 직접 만든 공유는 이미 최신 상태를 알고 있으므로,
+  // 굳이 서버에 다시 GET하지 않도록(그리고 아직 저장 전이라 404가 뜨지 않도록) 건너뛴다.
+  const skipInitialFetchRef = useRef(false);
 
   useEffect(() => {
     if (!shareId) return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
 
-    getSharedRoute(shareId)
-      .then((record) => {
-        if (cancelled) return;
-        setRemotePlaces(record.places);
-        setRemoteName(record.name || '');
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error(err);
-        setError('공유 동선을 불러오지 못했습니다. 링크가 만료되었을 수 있습니다.');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    if (skipInitialFetchRef.current) {
+      skipInitialFetchRef.current = false;
+      setLoading(false);
+      setError(null);
+    } else {
+      setLoading(true);
+      setError(null);
+      getSharedRoute(shareId)
+        .then((record) => {
+          if (cancelled) return;
+          setRemotePlaces(record.places);
+          setRemoteName(record.name || '');
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          console.error(err);
+          setError('공유 동선을 불러오지 못했습니다. 링크가 만료되었을 수 있습니다.');
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }
 
     const ws = new WebSocket(buildSharedRouteWsUrl(shareId, clientId));
     wsRef.current = ws;
@@ -77,12 +86,20 @@ export function useSharedRoute(initialShareId) {
     }, PUSH_DEBOUNCE_MS);
   }
 
-  async function createShare(name, places) {
-    const record = await createSharedRoute(name, places);
-    setRemotePlaces(record.places);
-    setRemoteName(record.name || '');
-    setShareId(record.shareId);
-    return record.shareId;
+  // 동기적으로 shareId를 반환한다 — navigator.share()는 클릭 이벤트로부터 너무 늦게
+  // (예: 네트워크 응답을 기다린 뒤) 호출하면 브라우저가 "사용자 제스처가 아님"으로 판단해
+  // 네이티브 공유 시트 대신 실패 처리한다. 그래서 서버 저장은 기다리지 않고 백그라운드로 보낸다.
+  function createShare(name, places) {
+    const newShareId = crypto.randomUUID();
+    skipInitialFetchRef.current = true;
+    // 참조가 selectedPlaces와 동일하면 App.jsx의 setSelectedPlaces가 아무 변화 없다고
+    // 판단해 리렌더를 건너뛰고, 그 결과 isApplyingRemoteRef 플래그가 안 풀려서 다음 로컬
+    // 수정이 서버로 전송되지 않는 문제가 생긴다. 새 배열로 복사해 참조를 다르게 만든다.
+    setRemotePlaces([...places]);
+    setRemoteName(name || '');
+    setShareId(newShareId);
+    updateSharedRoute(newShareId, { name, places, clientId }).catch(console.error);
+    return newShareId;
   }
 
   return { shareId, remotePlaces, remoteName, connectedCount, loading, error, pushUpdate, createShare };

@@ -19,3 +19,9 @@ services:
         sync: false
       - key: CORS_ORIGIN
         sync: false
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
+      - key: SHARED_ROUTE_TTL_SECONDS
+        sync: false

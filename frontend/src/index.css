@@ -1277,6 +1277,73 @@ body {
   font-size: 13px;
 }
 
+.share-route-trigger {
+  padding: 0 16px 12px;
+}
+
+.share-route-btn {
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 999px;
+  background: #eef5fe;
+  box-shadow: 0 2px 6px rgba(70, 110, 190, 0.1);
+  color: #4a6a97;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.share-route-link-row {
+  display: flex;
+  gap: 6px;
+  padding: 8px 4px;
+}
+
+.share-route-link-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #d7d9dd;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #555;
+}
+
+.share-route-copy-btn {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: #3b6ef6;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.share-route-presence {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px 8px;
+  font-size: 12px;
+  color: #4a6a97;
+}
+
+.share-route-presence-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2ecc71;
+  animation: share-route-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes share-route-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
 .route-detail-btn {
   width: 100%;
   padding: 10px 12px;

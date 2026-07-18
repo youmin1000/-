@@ -2,6 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import axios from 'axios';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
+import { createServer } from 'http';
+import { WebSocketServer } from 'ws';
 
 dotenv.config();
 
@@ -11,6 +14,9 @@ const KAKAO_REST_API_KEY = process.env.KAKAO_REST_API_KEY;
 const TMAP_APP_KEY = process.env.TMAP_APP_KEY;
 const ODSAY_API_KEY = process.env.ODSAY_API_KEY;
 const GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY;
+const UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL;
+const UPSTASH_REDIS_REST_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+const SHARED_ROUTE_TTL_SECONDS = Number(process.env.SHARED_ROUTE_TTL_SECONDS) || 60 * 60 * 24 * 60; // 기본 60일
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
 
 if (!KAKAO_REST_API_KEY) {
@@ -43,6 +49,14 @@ const odsayClient = axios.create({
 });
 
 const googlePlacesClient = axios.create({ baseURL: 'https://places.googleapis.com/v1' });
+
+// Upstash Redis는 REST API라 다른 외부 API들과 동일하게 axios 클라이언트로 다룬다.
+const upstashClient = UPSTASH_REDIS_REST_URL
+  ? axios.create({
+      baseURL: UPSTASH_REDIS_REST_URL,
+      headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` },
+    })
+  : null;
 
 // 카카오모빌리티 길찾기는 경유지를 최대 5개까지만 허용 (출발지+경유지5+도착지 = 7개)
 const MAX_POINTS_PER_REQUEST = 7;
@@ -658,6 +672,162 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.listen(PORT, () => {
+// ── 공유 동선 (Upstash Redis 영속 저장 + WebSocket 실시간 동기화) ──────────
+
+function requireUpstash() {
+  if (!upstashClient) {
+    throw new Error('UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN이 .env 파일에 설정되어 있지 않습니다.');
+  }
+}
+
+function sharedRouteKey(shareId) {
+  return `shared-route:${shareId}`;
+}
+
+async function getSharedRouteRecord(shareId) {
+  requireUpstash();
+  const { data } = await upstashClient.post('/', ['GET', sharedRouteKey(shareId)]);
+  return data.result ? JSON.parse(data.result) : null;
+}
+
+async function setSharedRouteRecord(shareId, record) {
+  requireUpstash();
+  await upstashClient.post('/', [
+    'SET',
+    sharedRouteKey(shareId),
+    JSON.stringify(record),
+    'EX',
+    String(SHARED_ROUTE_TTL_SECONDS),
+  ]);
+}
+
+// 방(room) 모델: 같은 공유 동선을 보고 있는 WebSocket 연결들을 shareId로 묶어둔다.
+const sharedRouteRooms = new Map(); // shareId -> Set<WebSocket>
+
+function broadcastToRoom(shareId, payload, { excludeWs } = {}) {
+  const room = sharedRouteRooms.get(shareId);
+  if (!room) return;
+  const message = JSON.stringify(payload);
+  room.forEach((ws) => {
+    if (ws === excludeWs || ws.readyState !== ws.OPEN) return;
+    ws.send(message);
+  });
+}
+
+// REST PUT과 WebSocket 'edit' 메시지가 공통으로 쓰는 단일 저장+브로드캐스트 경로.
+async function persistAndBroadcastSharedRoute(shareId, { name, places, clientId }) {
+  const record = { shareId, name, places, updatedAt: Date.now(), updatedBy: clientId || null };
+  await setSharedRouteRecord(shareId, record);
+  broadcastToRoom(shareId, { type: 'edit', ...record });
+  return record;
+}
+
+app.post('/api/routes/shared', async (req, res) => {
+  const { name, places } = req.body || {};
+  if (!Array.isArray(places) || places.length === 0) {
+    return res.status(400).json({ error: 'places 배열이 필요합니다.' });
+  }
+
+  try {
+    const shareId = crypto.randomBytes(9).toString('base64url');
+    const record = { shareId, name: name || '', places, updatedAt: Date.now(), updatedBy: null };
+    await setSharedRouteRecord(shareId, record);
+    res.json(record);
+  } catch (err) {
+    console.error('공유 동선 생성 오류:', err.response?.data || err.message);
+    res.status(500).json({ error: '공유 동선을 만드는 중 오류가 발생했습니다.' });
+  }
+});
+
+app.get('/api/routes/shared/:shareId', async (req, res) => {
+  try {
+    const record = await getSharedRouteRecord(req.params.shareId);
+    if (!record) {
+      return res.status(404).json({ error: '공유 동선을 찾을 수 없습니다. 링크가 만료되었을 수 있습니다.' });
+    }
+    res.json(record);
+  } catch (err) {
+    console.error('공유 동선 조회 오류:', err.response?.data || err.message);
+    res.status(500).json({ error: '공유 동선을 불러오는 중 오류가 발생했습니다.' });
+  }
+});
+
+app.put('/api/routes/shared/:shareId', async (req, res) => {
+  const { name, places, clientId } = req.body || {};
+  if (!Array.isArray(places) || places.length === 0) {
+    return res.status(400).json({ error: 'places 배열이 필요합니다.' });
+  }
+
+  try {
+    const record = await persistAndBroadcastSharedRoute(req.params.shareId, { name, places, clientId });
+    res.json(record);
+  } catch (err) {
+    console.error('공유 동선 갱신 오류:', err.response?.data || err.message);
+    res.status(500).json({ error: '공유 동선을 저장하는 중 오류가 발생했습니다.' });
+  }
+});
+
+const httpServer = createServer(app);
+const wss = new WebSocketServer({ server: httpServer, path: '/ws/routes' });
+
+wss.on('connection', (ws, req) => {
+  const { searchParams } = new URL(req.url, 'http://localhost');
+  const shareId = searchParams.get('shareId');
+  const clientId = searchParams.get('clientId');
+  if (!shareId) {
+    ws.close();
+    return;
+  }
+
+  ws.shareId = shareId;
+  ws.clientId = clientId;
+  ws.isAlive = true;
+  ws.on('pong', () => {
+    ws.isAlive = true;
+  });
+
+  if (!sharedRouteRooms.has(shareId)) sharedRouteRooms.set(shareId, new Set());
+  sharedRouteRooms.get(shareId).add(ws);
+  broadcastToRoom(shareId, { type: 'presence', count: sharedRouteRooms.get(shareId).size });
+
+  ws.on('message', async (raw) => {
+    let msg;
+    try {
+      msg = JSON.parse(raw.toString());
+    } catch {
+      return;
+    }
+    if (msg.type !== 'edit' || !Array.isArray(msg.places)) return;
+
+    try {
+      await persistAndBroadcastSharedRoute(shareId, { name: msg.name, places: msg.places, clientId: msg.clientId });
+    } catch (err) {
+      console.error('공유 동선 실시간 저장 오류:', err.response?.data || err.message);
+    }
+  });
+
+  ws.on('close', () => {
+    const room = sharedRouteRooms.get(shareId);
+    if (!room) return;
+    room.delete(ws);
+    if (room.size === 0) {
+      sharedRouteRooms.delete(shareId);
+    } else {
+      broadcastToRoom(shareId, { type: 'presence', count: room.size });
+    }
+  });
+});
+
+// 유휴 상태로 끊긴 소켓을 정리해 방 인원수가 부정확해지지 않도록 한다.
+const heartbeatInterval = setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (!ws.isAlive) return ws.terminate();
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 30000);
+wss.on('close', () => clearInterval(heartbeatInterval));
+
+httpServer.listen(PORT, () => {
   console.log(`백엔드 서버 실행 중: http://localhost:${PORT}`);
 });

@@ -7,10 +7,12 @@ import KakaoMap from './components/KakaoMap.jsx';
 import RouteDetailPanel from './components/RouteDetailPanel.jsx';
 import FavoriteLists from './components/FavoriteLists.jsx';
 import SavedRoutesPanel from './components/SavedRoutesPanel.jsx';
+import ShareRoutePanel from './components/ShareRoutePanel.jsx';
 import { searchPlaces, getDirections } from './api.js';
 import { useFavorites } from './useFavorites.js';
 import { useSearchHistory } from './useSearchHistory.js';
 import { useSavedRoutes } from './useSavedRoutes.js';
+import { useSharedRoute } from './useSharedRoute.js';
 
 const DEFAULT_SEGMENT_COLOR = '#3b6ef6';
 const WALK_SEGMENT_COLOR = '#9aa0a6';
@@ -100,12 +102,25 @@ export default function App() {
   const [routeError, setRouteError] = useState(null);
   const [showRouteDetail, setShowRouteDetail] = useState(false);
   const [showSavedRoutes, setShowSavedRoutes] = useState(false);
+  const [showSharePanel, setShowSharePanel] = useState(false);
   const [routeNameInput, setRouteNameInput] = useState('');
   const routeRequestIdRef = useRef(0);
+  const isApplyingRemoteRef = useRef(false);
   const { lists, favoriteIds, createList, deleteList, renameList, togglePlaceInList } = useFavorites();
   const { history, addToHistory, removeFromHistory, enabled: historyEnabled, toggleEnabled: toggleHistoryEnabled } =
     useSearchHistory();
   const { routes: savedRoutes, saveRoute, deleteRoute, renameRoute } = useSavedRoutes();
+  const [initialShareId] = useState(() => new URLSearchParams(window.location.search).get('share'));
+  const {
+    shareId,
+    remotePlaces,
+    remoteName,
+    connectedCount,
+    loading: shareLoading,
+    error: shareError,
+    pushUpdate: pushSharedUpdate,
+    createShare,
+  } = useSharedRoute(initialShareId);
 
   const selectedIds = new Set(selectedPlaces.map((p) => p.id));
   const transitColors = buildTransitRouteColors(routeData);
@@ -139,6 +154,24 @@ export default function App() {
         if (routeRequestIdRef.current === requestId) setRouteLoading(false);
       });
   }, [selectedPlaces, routeMode]);
+
+  // 공유 동선의 원격 상태(최초 로드 또는 다른 사람의 실시간 수정)가 도착하면 selectedPlaces에 반영한다.
+  useEffect(() => {
+    if (remotePlaces === null) return;
+    isApplyingRemoteRef.current = true;
+    setSelectedPlaces(remotePlaces);
+  }, [remotePlaces]);
+
+  // selectedPlaces가 바뀔 때마다, 공유 중이면 (원격에서 온 변경이 아닌 한) 서버로 되돌려 보낸다.
+  useEffect(() => {
+    if (isApplyingRemoteRef.current) {
+      isApplyingRemoteRef.current = false;
+      return;
+    }
+    if (!shareId) return;
+    pushSharedUpdate(selectedPlaces, remoteName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPlaces]);
 
   async function handleSearch(query) {
     setLoading(true);
@@ -193,6 +226,17 @@ export default function App() {
   function handleLoadRoute(route) {
     setSelectedPlaces(route.places);
     setShowSavedRoutes(false);
+  }
+
+  async function handleShareRoute() {
+    if (!shareId) {
+      const newShareId = await createShare(routeNameInput.trim(), selectedPlaces);
+      // history 변수명이 useSearchHistory()의 검색 기록 배열과 겹치므로 반드시 window.history를 써야 한다.
+      const url = new URL(window.location.href);
+      url.searchParams.set('share', newShareId);
+      window.history.pushState({}, '', url);
+    }
+    setShowSharePanel(true);
   }
 
   return (
@@ -292,6 +336,22 @@ export default function App() {
             onRenameRoute={renameRoute}
           />
         </div>
+
+        {(selectedPlaces.length > 0 || shareId) && (
+          <div className="share-route-trigger">
+            <button type="button" className="share-route-btn" onClick={handleShareRoute}>
+              {shareId ? `공유 중 · ${connectedCount}명 접속` : '동선 공유하기'}
+            </button>
+            <ShareRoutePanel
+              visible={showSharePanel}
+              onClose={() => setShowSharePanel(false)}
+              shareUrl={shareId ? `${window.location.origin}${window.location.pathname}?share=${shareId}` : ''}
+              connectedCount={connectedCount}
+              loading={shareLoading}
+              error={shareError}
+            />
+          </div>
+        )}
 
         {selectedPlaces.length >= 2 && (
           <div className="route-detail-trigger">

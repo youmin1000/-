@@ -38,3 +38,24 @@ export async function getDirections(places, mode = 'car') {
   });
   return data;
 }
+
+export async function createSharedRoute(name, places) {
+  const { data } = await client.post('/api/routes/shared', { name, places });
+  return data;
+}
+
+export async function getSharedRoute(shareId) {
+  const { data } = await client.get(`/api/routes/shared/${shareId}`);
+  return data;
+}
+
+export async function updateSharedRoute(shareId, { name, places, clientId }) {
+  const { data } = await client.put(`/api/routes/shared/${shareId}`, { name, places, clientId });
+  return data;
+}
+
+// http(s) API_BASE_URL을 같은 호스트의 ws(s) 주소로 바꿔준다 (별도 프론트 env 불필요).
+export function buildSharedRouteWsUrl(shareId, clientId) {
+  const wsBase = API_BASE_URL.replace(/^http/, 'ws');
+  return `${wsBase}/ws/routes?shareId=${encodeURIComponent(shareId)}&clientId=${encodeURIComponent(clientId)}`;
+}

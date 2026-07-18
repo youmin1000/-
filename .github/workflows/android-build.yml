@@ -79,10 +79,23 @@ jobs:
         run: |
           ls -la frontend/android/app/release.keystore
           file frontend/android/app/release.keystore
+          if [ "$ANDROID_KEYSTORE_PASSWORD" = "$ANDROID_KEY_PASSWORD" ]; then
+            echo "STOREPASS and KEYPASS secrets are EQUAL"
+          else
+            echo "STOREPASS and KEYPASS secrets DIFFER"
+          fi
           keytool -list -v \
             -keystore frontend/android/app/release.keystore \
             -storepass "$ANDROID_KEYSTORE_PASSWORD" \
             -alias "$ANDROID_KEY_ALIAS"
+          echo "--- testing key password by requesting a CSR (needs the actual private key) ---"
+          keytool -certreq \
+            -keystore frontend/android/app/release.keystore \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -alias "$ANDROID_KEY_ALIAS" \
+            -keypass "$ANDROID_KEY_PASSWORD" \
+            -file /tmp/test.csr
+          echo "KEY PASSWORD IS CORRECT"
 
       - name: Build signed release AAB
         if: ${{ env.HAS_KEYSTORE == 'true' }}

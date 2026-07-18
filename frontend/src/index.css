@@ -6,13 +6,15 @@ body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo',
     'Malgun Gothic', sans-serif;
-  background: #f5f6f8;
+  background: linear-gradient(135deg, #eaf2fd 0%, #e7eefc 45%, #eaf6fc 100%);
   color: #222;
 }
 
 .app-layout {
   display: flex;
+  gap: 16px;
   height: 100vh;
+  padding: 16px;
 }
 
 .sidebar {
@@ -21,49 +23,121 @@ body {
   height: 100%;
   overflow-y: auto;
   background: #fff;
-  border-right: 1px solid #e2e4e8;
+  border-radius: 20px;
+  box-shadow: 0 8px 28px rgba(70, 110, 190, 0.12);
   display: flex;
   flex-direction: column;
+  /* 상세정보(구글 사진/리뷰)가 비동기로 늦게 도착해 위쪽 항목 높이가 바뀔 때,
+     브라우저 스크롤 앵커링이 스크롤 위치를 임의로 보정하면서 화면이 훅 내려가는
+     현상이 간헐적으로 발생했다 — 이 리스트는 우리가 직접 위치를 제어하므로 꺼둔다. */
+  overflow-anchor: none;
+}
+
+/* 추천 관광지처럼 목록이 길어 전체 콘텐츠가 사이드바보다 커지면, 헤더에 걸린
+   overflow: hidden 때문에 min-height가 0으로 취급되어 헤더가 스크롤되는 대신
+   찌그러지는 flex 버그가 있었다 — 사이드바의 모든 직계 섹션은 항상 원래 높이를
+   유지하고, 넘치는 부분은 .sidebar 자체가 스크롤되게 한다. */
+.sidebar > * {
+  flex-shrink: 0;
 }
 
 .map-area {
   flex: 1;
   position: relative;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 8px 28px rgba(70, 110, 190, 0.12);
 }
 
 .sidebar-header {
-  padding: 16px 16px 8px;
-  border-bottom: 1px solid #eee;
+  position: relative;
+  padding: 22px 20px 14px;
+  border-bottom: 1px solid #eaf1fd;
+  background: linear-gradient(180deg, #f3f8ff 0%, #ffffff 100%);
+  border-radius: 20px 20px 0 0;
+  overflow: hidden;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px 5px 10px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(59, 110, 246, 0.2);
+  color: #1f3358;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  margin-bottom: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.hero-badge-pin {
+  color: #1f3358;
+  flex-shrink: 0;
+}
+
+/* 카드 오른쪽 위 모서리에만 붙는 작은 장식(나선+곡선+핀) — 본문 폭 전체를
+   차지하지 않도록 절대 위치로 오른쪽 상단 구석에만 놓는다. */
+.hero-route-deco {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  width: 108px;
+  height: 70px;
+  pointer-events: none;
+  color: #c7cbd6;
+  z-index: 0;
 }
 
 .sidebar-header h1 {
-  font-size: 18px;
-  margin: 0 0 12px;
+  font-size: 19px;
+  margin: 0 0 4px;
+  font-weight: 800;
+  color: #1f3358;
+  position: relative;
+}
+
+.hero-subtitle {
+  font-size: 12px;
+  color: #7a8bab;
+  margin: 0 0 14px;
+  position: relative;
 }
 
 .tab-row {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   margin-bottom: 10px;
+  background: #eaf1fd;
+  border-radius: 999px;
+  padding: 3px;
+  position: relative;
 }
 
 .tab-btn {
   flex: 1;
   min-width: 0;
   padding: 8px 10px;
-  border: 1px solid #d7d9dd;
-  background: #fff;
-  border-radius: 8px;
-  font-size: 13px;
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
   cursor: pointer;
-  color: #555;
+  color: #7a8bab;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .tab-btn.active {
   background: #3b6ef6;
+  box-shadow: 0 3px 10px rgba(59, 110, 246, 0.35);
   border-color: #3b6ef6;
   color: #fff;
 }
@@ -74,40 +148,52 @@ body {
 
 .region-select-row select {
   width: 100%;
-  padding: 8px 10px;
-  border: 1px solid #d7d9dd;
-  border-radius: 8px;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 999px;
+  background: #eef5fe;
   font-size: 13px;
+  font-weight: 600;
+  color: #2f4f7a;
 }
 
 .category-tab-row {
-  padding: 10px 16px 0;
+  padding: 10px 16px 12px;
   margin-bottom: 0;
+  background: none;
+  border-radius: 0;
   flex-wrap: wrap;
-  row-gap: 6px;
+  row-gap: 8px;
 }
 
 .category-tab-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 8px 6px;
+  gap: 5px;
+  padding: 9px 8px;
   font-size: 12px;
+  font-weight: 600;
   flex: 1 1 30%;
   min-width: 100px;
   white-space: nowrap;
   overflow: visible;
   text-overflow: clip;
+  background: #eef5fe;
+  border-radius: 999px;
+  color: #4a6a97;
+}
+
+.category-tab-btn.active {
+  box-shadow: 0 3px 10px rgba(59, 110, 246, 0.35);
 }
 
 .tab-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   flex-shrink: 0;
   border-radius: 50%;
   display: inline-block;
-  flex-shrink: 0;
 }
 
 .group-label {
@@ -352,32 +438,54 @@ body {
   position: relative;
 }
 
-.search-history-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  margin-top: 4px;
+.search-history-panel {
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
   background: #fff;
   border: 1px solid #d7d9dd;
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-  z-index: 30;
-  max-height: 260px;
-  overflow-y: auto;
+  padding: 8px 4px;
+}
+
+.search-history-panel-header {
+  padding: 0 8px 4px;
 }
 
 .search-history-header {
-  padding: 8px 12px 4px;
   font-size: 11px;
   font-weight: 600;
   color: #999;
+}
+
+.search-history-empty {
+  padding: 10px 8px;
+  font-size: 13px;
+  color: #999;
+}
+
+.search-history-toggle-btn {
+  align-self: flex-end;
+  margin-top: 6px;
+  border: none;
+  background: none;
+  font-size: 12px;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 4px 8px;
+  text-decoration: underline;
+}
+
+.search-history-toggle-btn:hover {
+  color: #333;
 }
 
 .search-history-list {
   list-style: none;
   margin: 0;
   padding: 0 4px 6px;
+  max-height: 220px;
+  overflow-y: auto;
 }
 
 .search-history-item {
@@ -417,9 +525,20 @@ body {
 
 .section-label {
   font-size: 13px;
-  font-weight: 600;
-  color: #666;
+  font-weight: 700;
+  color: #1f3358;
   padding: 12px 16px 4px;
+}
+
+.route-card {
+  margin: 4px 16px 12px;
+  background: #eef5fe;
+  border-radius: 16px;
+  padding: 2px 0 6px;
+}
+
+.route-card .section-label {
+  padding: 12px 14px 4px;
 }
 
 .place-list {
@@ -835,6 +954,201 @@ body {
   background: #2f5bd1;
 }
 
+.google-detail-status {
+  padding: 8px 0;
+  font-size: 12px;
+  color: #999;
+}
+
+.google-detail {
+  margin-top: 4px;
+  margin-bottom: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e9ebef;
+}
+
+.google-detail-photos {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 8px;
+}
+
+.google-detail-photos img {
+  height: 72px;
+  width: 96px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.google-detail-photos img:hover {
+  transform: scale(1.05);
+}
+
+.google-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  margin-bottom: 6px;
+}
+
+.google-detail-rating {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #e0a90c;
+  cursor: pointer;
+}
+
+.google-detail-rating:disabled {
+  cursor: default;
+}
+
+.photo-lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 24px;
+}
+
+.photo-lightbox-img {
+  max-width: 90vw;
+  max-height: 90vh;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.photo-lightbox-close {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: #fff;
+  font-size: 18px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.google-detail-open {
+  color: #2fa84f;
+  font-weight: 600;
+}
+
+.google-detail-open.closed {
+  color: #e05555;
+}
+
+.google-detail-hours {
+  background: #f7f8fb;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.google-detail-hours-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: none;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #333;
+  cursor: pointer;
+  text-align: left;
+}
+
+.google-detail-hours-today {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+  color: #777;
+}
+
+.google-detail-hours-chevron {
+  color: #999;
+  font-size: 10px;
+}
+
+.google-detail-hours-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 10px 10px;
+  font-size: 12px;
+}
+
+.google-detail-hours-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  color: #666;
+}
+
+.google-detail-hours-list li.is-today {
+  color: #333;
+  font-weight: 700;
+}
+
+.google-detail-reviews {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.google-detail-review {
+  background: #f7f8fb;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.google-detail-review-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  margin-bottom: 4px;
+}
+
+.google-detail-review-author {
+  font-weight: 600;
+  color: #333;
+}
+
+.google-detail-review-rating {
+  color: #e0a90c;
+}
+
+.google-detail-review-time {
+  color: #999;
+  margin-left: auto;
+}
+
+.google-detail-review-text {
+  font-size: 12.5px;
+  color: #444;
+  line-height: 1.4;
+}
+
 .route-detail-trigger {
   padding: 0 16px 12px;
 }
@@ -874,13 +1188,14 @@ body {
 
 .saved-route-list-btn {
   width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #d7d9dd;
-  border-radius: 8px;
-  background: #fff;
-  color: #555;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 999px;
+  background: #eef5fe;
+  box-shadow: 0 2px 6px rgba(70, 110, 190, 0.1);
+  color: #4a6a97;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
 }
 

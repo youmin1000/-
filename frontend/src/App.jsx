@@ -52,6 +52,19 @@ function buildTransitRouteColors(routeData) {
 
 // 대중교통은 도보/버스/지하철 구간마다 색으로 구분해서 그릴 수 있도록
 // 구간(step) 단위로 쪼갠 좌표+색상 목록을 만든다. 그 외 모드는 경로 전체를 한 색으로 그린다.
+// 배지/장식에 쓰는 지도 핀 아이콘 — 이모지 대신 깔끔한 벡터 핀으로 통일한다.
+function PinIcon({ size = 14, className }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 22" fill="none" className={className}>
+      <path
+        d="M8 21.5S1 13.9 1 8a7 7 0 1 1 14 0c0 5.9-7 13.5-7 13.5Z"
+        fill="currentColor"
+      />
+      <circle cx="8" cy="8" r="2.6" fill="#fff" />
+    </svg>
+  );
+}
+
 function buildRouteSegments(routeData, mode, transitColors) {
   if (!routeData) return null;
 
@@ -90,7 +103,8 @@ export default function App() {
   const [routeNameInput, setRouteNameInput] = useState('');
   const routeRequestIdRef = useRef(0);
   const { lists, favoriteIds, createList, deleteList, renameList, togglePlaceInList } = useFavorites();
-  const { history, addToHistory, removeFromHistory } = useSearchHistory();
+  const { history, addToHistory, removeFromHistory, enabled: historyEnabled, toggleEnabled: toggleHistoryEnabled } =
+    useSearchHistory();
   const { routes: savedRoutes, saveRoute, deleteRoute, renameRoute } = useSavedRoutes();
 
   const selectedIds = new Set(selectedPlaces.map((p) => p.id));
@@ -185,7 +199,26 @@ export default function App() {
     <div className="app-layout">
       <aside className="sidebar">
         <div className="sidebar-header">
-          <h1>한국 관광지 동선 추천</h1>
+          <svg className="hero-route-deco" viewBox="0 0 140 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="20" cy="70" r="13" stroke="currentColor" strokeWidth="1.5" strokeDasharray="1 6" strokeLinecap="round" />
+            <path
+              d="M33 63 C 55 55, 85 42, 104 32"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeDasharray="1 6"
+              strokeLinecap="round"
+            />
+            <g transform="translate(96, 10.5)">
+              <path d="M8 21.5S1 13.9 1 8a7 7 0 1 1 14 0c0 5.9-7 13.5-7 13.5Z" fill="currentColor" />
+              <circle cx="8" cy="8" r="2.6" fill="#fff" />
+            </g>
+          </svg>
+          <span className="hero-badge">
+            <PinIcon size={12} className="hero-badge-pin" />
+            DISCOVER KOREA
+          </span>
+          <h1>여행 플래너</h1>
+          <p className="hero-subtitle">취향에 맞는 최적의 여행 동선을 제안해드려요</p>
           <div className="tab-row">
             <button
               type="button"
@@ -216,20 +249,24 @@ export default function App() {
               history={history}
               onSelectHistory={handleSearch}
               onRemoveHistory={removeFromHistory}
+              historyEnabled={historyEnabled}
+              onToggleHistoryEnabled={toggleHistoryEnabled}
             />
           )}
         </div>
 
         {error && <div className="error-banner">{error}</div>}
 
-        <div className="section-label">
-          방문 순서 ({selectedPlaces.length}곳 선택됨)
+        <div className="route-card">
+          <div className="section-label">
+            방문 순서 ({selectedPlaces.length}곳 선택됨)
+          </div>
+          <SelectedRoute
+            selectedPlaces={selectedPlaces}
+            onRemove={handleRemove}
+            onMove={handleMove}
+          />
         </div>
-        <SelectedRoute
-          selectedPlaces={selectedPlaces}
-          onRemove={handleRemove}
-          onMove={handleMove}
-        />
 
         <div className="saved-route-trigger">
           {selectedPlaces.length > 0 && (

@@ -10,6 +10,7 @@ const PORT = process.env.PORT || 4000;
 const KAKAO_REST_API_KEY = process.env.KAKAO_REST_API_KEY;
 const TMAP_APP_KEY = process.env.TMAP_APP_KEY;
 const ODSAY_API_KEY = process.env.ODSAY_API_KEY;
+const GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY;
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
 
 if (!KAKAO_REST_API_KEY) {
@@ -40,6 +41,8 @@ const odsayClient = axios.create({
   baseURL: 'https://api.odsay.com',
   headers: { Referer: `http://localhost:${PORT}` },
 });
+
+const googlePlacesClient = axios.create({ baseURL: 'https://places.googleapis.com/v1' });
 
 // 카카오모빌리티 길찾기는 경유지를 최대 5개까지만 허용 (출발지+경유지5+도착지 = 7개)
 const MAX_POINTS_PER_REQUEST = 7;
@@ -420,6 +423,97 @@ app.get('/api/places/search', async (req, res) => {
     res.status(err.response?.status || 500).json({
       error: '관광지 검색 중 오류가 발생했습니다.',
     });
+  }
+});
+
+// 카카오가 주는 이름/좌표로 구글 Places에서 같은 장소를 찾아 사진·평점·영업시간·리뷰를 가져온다.
+// 소규모 로컬 업장은 구글에 등록되어 있지 않을 수 있어, 못 찾으면 found:false만 반환한다.
+app.get('/api/places/detail', async (req, res) => {
+  const { name, lat, lng, address } = req.query;
+
+  if (!GOOGLE_PLACES_API_KEY) {
+    return res.status(500).json({ error: 'GOOGLE_PLACES_API_KEY가 .env 파일에 설정되어 있지 않습니다.' });
+  }
+  if (!name || !lat || !lng) {
+    return res.status(400).json({ error: 'name, lat, lng 파라미터가 필요합니다.' });
+  }
+
+  try {
+    const searchResponse = await googlePlacesClient.post(
+      '/places:searchText',
+      {
+        textQuery: `${name} ${address || ''}`.trim(),
+        // 좌표 200m 반경으로 편향을 줘야 이름이 비슷한 다른 지역 업장과 헷갈리지 않는다.
+        locationBias: {
+          circle: {
+            center: { latitude: parseFloat(lat), longitude: parseFloat(lng) },
+            radius: 200,
+          },
+        },
+      },
+      {
+        headers: {
+          'X-Goog-Api-Key': GOOGLE_PLACES_API_KEY,
+          'X-Goog-FieldMask': 'places.id',
+        },
+      }
+    );
+
+    const match = searchResponse.data.places?.[0];
+    if (!match) {
+      return res.json({ found: false });
+    }
+
+    const detailResponse = await googlePlacesClient.get(`/places/${match.id}`, {
+      params: { languageCode: 'ko' },
+      headers: {
+        'X-Goog-Api-Key': GOOGLE_PLACES_API_KEY,
+        'X-Goog-FieldMask': 'rating,userRatingCount,regularOpeningHours,reviews,photos',
+      },
+    });
+
+    const data = detailResponse.data;
+
+    res.json({
+      found: true,
+      rating: data.rating ?? null,
+      userRatingCount: data.userRatingCount ?? null,
+      openNow: data.regularOpeningHours?.openNow ?? null,
+      weekdayDescriptions: data.regularOpeningHours?.weekdayDescriptions ?? [],
+      reviews: (data.reviews || []).slice(0, 5).map((r) => ({
+        author: r.authorAttribution?.displayName || '익명',
+        rating: r.rating,
+        text: r.text?.text || '',
+        relativeTime: r.relativePublishTimeDescription || '',
+      })),
+      photoNames: (data.photos || []).slice(0, 6).map((p) => p.name),
+    });
+  } catch (err) {
+    console.error('구글 Places 조회 오류:', err.response?.data || err.message);
+    res.status(err.response?.status || 500).json({
+      error: '상세 정보를 불러오는 중 오류가 발생했습니다.',
+    });
+  }
+});
+
+// 프론트가 구글 API 키를 직접 다루지 않도록, 사진도 백엔드가 대신 받아서 그대로 흘려보낸다(프록시).
+app.get('/api/places/photo', async (req, res) => {
+  const { name, maxWidth = 400 } = req.query;
+
+  if (!GOOGLE_PLACES_API_KEY || !name) {
+    return res.status(400).end();
+  }
+
+  try {
+    const response = await googlePlacesClient.get(`/${name}/media`, {
+      params: { maxWidthPx: maxWidth, key: GOOGLE_PLACES_API_KEY },
+      responseType: 'stream',
+    });
+    res.set('Content-Type', response.headers['content-type']);
+    response.data.pipe(res);
+  } catch (err) {
+    console.error('구글 Places 사진 오류:', err.response?.status || err.message);
+    res.status(err.response?.status || 500).end();
   }
 });
 

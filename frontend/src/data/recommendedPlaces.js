@@ -17,7 +17,7 @@ import { OTHER_REGIONS_POPUP2_BULK } from './bulk/otherRegionsPopup2.generated.j
 // cafe/indoor/outdoor는 카카오 카테고리 실시간 검색(/api/places/nearby)으로 대체되어
 // 더 이상 큐레이션 데이터를 쓰지 않는다 (RecommendedPlaces.jsx의 LIVE_CATEGORIES 참고).
 // activity/popup은 카카오에 대응 카테고리가 없어 큐레이션을 그대로 유지한다.
-export const CATEGORY_KEYS = ['cafe', 'indoor', 'outdoor', 'activity', 'popup'];
+export const CATEGORY_KEYS = ['indoor', 'outdoor', 'cafe', 'activity', 'popup'];
 
 function emptyCategories() {
   return { activity: [], popup: [] };
@@ -35,6 +35,21 @@ const SEOUL_DISTRICTS = [
 ];
 
 export const RECOMMENDED_PLACES = {
+  서울: {
+    // __districts가 있으면 "구 선택" 2단계 UI가 활성화된다 (RecommendedPlaces.jsx 참고).
+    __districts: SEOUL_DISTRICTS,
+    districts: Object.fromEntries(
+      SEOUL_DISTRICTS.map((gu) => [
+        gu,
+        {
+          ...emptyCategories(),
+          activity: SEOUL_BULK_ACTIVITY_DISTRICTS[gu] || [],
+          popup: SEOUL_BULK_POPUP2_DISTRICTS[gu] || [],
+        },
+      ])
+    ),
+  },
+
   대구: {
     activity: [
       {
@@ -107,21 +122,6 @@ export const RECOMMENDED_PLACES = {
     ],
   },
 
-  서울: {
-    // __districts가 있으면 "구 선택" 2단계 UI가 활성화된다 (RecommendedPlaces.jsx 참고).
-    __districts: SEOUL_DISTRICTS,
-    districts: Object.fromEntries(
-      SEOUL_DISTRICTS.map((gu) => [
-        gu,
-        {
-          ...emptyCategories(),
-          activity: SEOUL_BULK_ACTIVITY_DISTRICTS[gu] || [],
-          popup: SEOUL_BULK_POPUP2_DISTRICTS[gu] || [],
-        },
-      ])
-    ),
-  },
-
   ...(() => {
     const regionNames = new Set([
       ...Object.keys(OTHER_REGIONS_ACTIVITY_BULK),
@@ -140,14 +140,20 @@ export const RECOMMENDED_PLACES = {
   })(),
 };
 
-export const REGIONS = Object.keys(RECOMMENDED_PLACES);
+// 지역 선택 드롭다운에 보여줄 고정 순서. Object.keys 순서(대량 데이터 삽입 순서)에
+// 기대지 않고 명시적으로 정렬한다.
+const REGION_ORDER = [
+  '서울', '인천', '강원', '경기도', '대전', '대구', '부산', '울산',
+  '제주', '충남', '충북', '경상북도', '경상남도', '전라남도', '전북',
+];
+export const REGIONS = REGION_ORDER.filter((r) => RECOMMENDED_PLACES[r]);
 
 export function isDistrictedRegion(regionData) {
   return Array.isArray(regionData.__districts);
 }
 
 export const CATEGORY_LABELS = {
-  cafe: '카페&음식점',
+  cafe: '음식점&카페',
   indoor: '실내',
   outdoor: '실외',
   activity: '액티비티',

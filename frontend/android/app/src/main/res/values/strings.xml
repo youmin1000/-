@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">한국 여행 플래너</string>
+    <string name="title_activity_main">한국 여행 플래너</string>
+    <string name="package_name">com.youmin262.koreatravelroute</string>
+    <string name="custom_url_scheme">com.youmin262.koreatravelroute</string>
+</resources>

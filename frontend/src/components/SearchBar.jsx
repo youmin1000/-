@@ -1,6 +1,14 @@
 import { useState } from 'react';
 
-export default function SearchBar({ onSearch, loading, history, onSelectHistory, onRemoveHistory }) {
+export default function SearchBar({
+  onSearch,
+  loading,
+  history,
+  onSelectHistory,
+  onRemoveHistory,
+  historyEnabled,
+  onToggleHistoryEnabled,
+}) {
   const [query, setQuery] = useState('');
   const [showHistory, setShowHistory] = useState(false);
 
@@ -32,32 +40,53 @@ export default function SearchBar({ onSearch, loading, history, onSelectHistory,
           {loading ? '검색 중...' : '검색'}
         </button>
       </form>
-      {showHistory && history && history.length > 0 && (
-        <div className="search-history-dropdown">
-          <div className="search-history-header">최근 검색어</div>
-          <ul className="search-history-list">
-            {history.map((term) => (
-              <li key={term} className="search-history-item">
-                <button
-                  type="button"
-                  className="search-history-term"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => handleHistoryClick(term)}
-                >
-                  {term}
-                </button>
-                <button
-                  type="button"
-                  className="search-history-remove"
-                  title="기록 삭제"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => onRemoveHistory(term)}
-                >
-                  ×
-                </button>
-              </li>
-            ))}
-          </ul>
+
+      {showHistory && (
+        <div className="search-history-panel">
+          <div className="search-history-panel-header">
+            <span className="search-history-header">최근 검색어</span>
+          </div>
+
+          {historyEnabled ? (
+            history && history.length > 0 ? (
+              <ul className="search-history-list">
+                {history.map((term) => (
+                  <li key={term} className="search-history-item">
+                    <button
+                      type="button"
+                      className="search-history-term"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => handleHistoryClick(term)}
+                    >
+                      {term}
+                    </button>
+                    <button
+                      type="button"
+                      className="search-history-remove"
+                      title="기록 삭제"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => onRemoveHistory(term)}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="search-history-empty">최근 검색어가 없습니다.</div>
+            )
+          ) : (
+            <div className="search-history-empty">검색기록이 꺼져있습니다.</div>
+          )}
+
+          <button
+            type="button"
+            className="search-history-toggle-btn"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onToggleHistoryEnabled}
+          >
+            {historyEnabled ? '검색기록 끄기' : '검색기록 켜기'}
+          </button>
         </div>
       )}
     </div>

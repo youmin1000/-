@@ -13,6 +13,8 @@ import PlaceList from './PlaceList.jsx';
 
 const SCALE_OPTIONS_KM = [0.5, 1, 2, 4];
 const ALL_DISTRICTS = '전체';
+const ALL_CATEGORY = '전체';
+const CATEGORY_TABS = [ALL_CATEGORY, ...CATEGORY_KEYS];
 
 // 카카오 로컬 API에 대응하는 카테고리 코드가 있는 것들 — 이 카테고리는 큐레이션 대신
 // 실시간 주변검색(/api/places/nearby)으로 가져온다. 팝업스토어/액티비티는 카카오에
@@ -34,16 +36,50 @@ function getRawGroups(region, district, category) {
   return regionData[category] || [];
 }
 
-function getFetchTargets(region) {
+function allDistrictsOf(region) {
   const regionData = RECOMMENDED_PLACES[region];
-  if (isDistrictedRegion(regionData)) {
-    const targets = [];
-    regionData.__districts.forEach((gu) => {
-      EAGER_CATEGORY_KEYS.forEach((cat) => targets.push({ district: gu, category: cat }));
-    });
-    return targets;
-  }
-  return EAGER_CATEGORY_KEYS.map((cat) => ({ district: null, category: cat }));
+  return isDistrictedRegion(regionData) ? regionData.__districts : [null];
+}
+
+// 구를 '전체'로 보고 있으면 그 지역의 모든 구를, 특정 구를 보고 있으면 그 구 하나만 대상으로 한다.
+function districtsInScope(region, selectedDistrict) {
+  if (selectedDistrict === ALL_DISTRICTS) return allDistrictsOf(region);
+  const regionData = RECOMMENDED_PLACES[region];
+  return isDistrictedRegion(regionData) ? [selectedDistrict] : [null];
+}
+
+// 지도 미리보기용 배경 선로딩 대상: 탭/구 선택과 무관하게 현재 지역의
+// 모든 구 × 큐레이션 카테고리 전부를 대상으로 한다.
+function getEagerTargets(region) {
+  const targets = [];
+  allDistrictsOf(region).forEach((gu) => {
+    EAGER_CATEGORY_KEYS.forEach((cat) => targets.push({ district: gu, category: cat }));
+  });
+  return targets;
+}
+
+// 실시간 카테고리는 구별로 나누지 않는다 — 구를 '전체'로 보고 있을 땐 그 지역 전체를
+// 한 번에 넓은 반경으로 검색한다(gu=null). 구마다 따로 호출하면 지역당 API 호출이
+// 수십 건으로 늘어나기 때문에 큐레이션 카테고리와는 다르게 취급한다.
+function liveDistrictsInScope(region, selectedDistrict) {
+  if (!isDistrictedRegion(RECOMMENDED_PLACES[region])) return [null];
+  if (selectedDistrict === ALL_DISTRICTS) return [null];
+  return [selectedDistrict];
+}
+
+// 실시간 카테고리(카페/실내/야외)는 지금 실제로 보고 있는 범위만 그때그때 불러온다.
+function getLiveTargets(region, selectedDistrict, selectedCategory) {
+  const cats =
+    selectedCategory === ALL_CATEGORY
+      ? LIVE_CATEGORIES
+      : LIVE_CATEGORIES.filter((c) => c === selectedCategory);
+  if (cats.length === 0) return [];
+
+  const targets = [];
+  liveDistrictsInScope(region, selectedDistrict).forEach((gu) => {
+    cats.forEach((cat) => targets.push({ district: gu, category: cat }));
+  });
+  return targets;
 }
 
 function cacheKeyFor(region, district, category) {
@@ -101,19 +137,47 @@ async function resolveGroups(searchLabel, category, groups) {
   return resolved.filter((group) => group.places.length > 0);
 }
 
-function buildAllDistrictsGroups(region, districts, category, cache) {
+// 현재 구/카테고리 선택(전체 포함)에 맞춰 실제로 화면에 그릴 그룹 목록을 만든다.
+// 구가 '전체'면 구명을, 카테고리가 '전체'면 카테고리명을 그룹 라벨 앞에 덧붙여서
+// 어디서 온 항목인지 구분할 수 있게 한다.
+function buildDisplayGroups(region, selectedDistrict, selectedCategory, cache, errorKeys) {
+  const categories = selectedCategory === ALL_CATEGORY ? CATEGORY_KEYS : [selectedCategory];
+  const showCategoryLabel = selectedCategory === ALL_CATEGORY;
+  const districted = isDistrictedRegion(RECOMMENDED_PLACES[region]);
   const merged = [];
-  districts.forEach((gu) => {
-    const guGroups = cache[cacheKeyFor(region, gu, category)];
-    if (!guGroups) return;
-    guGroups.forEach((group) => {
-      merged.push({
-        area: group.area ? `${gu} · ${group.area}` : gu,
-        places: group.places,
+  let loading = false;
+  let hasError = false;
+
+  categories.forEach((cat) => {
+    const isLive = LIVE_CATEGORIES.includes(cat);
+    // 실시간 카테고리는 구별로 나누지 않고 지역 전체를 한 번에 검색하므로 구 라벨이 의미 없다.
+    const showDistrictLabel = !isLive && districted && selectedDistrict === ALL_DISTRICTS;
+    const districts = isLive
+      ? liveDistrictsInScope(region, selectedDistrict)
+      : districtsInScope(region, selectedDistrict);
+
+    districts.forEach((gu) => {
+      const key = cacheKeyFor(region, gu, cat);
+      const groups = cache[key];
+      if (!groups) {
+        if (errorKeys[key]) hasError = true;
+        else loading = true;
+        return;
+      }
+      groups.forEach((group) => {
+        const labelParts = [];
+        if (showDistrictLabel) labelParts.push(gu);
+        if (showCategoryLabel) labelParts.push(CATEGORY_LABELS[cat] || cat);
+        if (group.area) labelParts.push(group.area);
+        merged.push({
+          area: labelParts.length > 0 ? labelParts.join(' · ') : null,
+          places: group.places,
+        });
       });
     });
   });
-  return merged;
+
+  return { groups: merged, loading, error: hasError };
 }
 
 export default function RecommendedPlaces({
@@ -140,9 +204,10 @@ export default function RecommendedPlaces({
   const regionData = RECOMMENDED_PLACES[region];
   const districted = isDistrictedRegion(regionData);
 
-  // 지도 미리보기 + 각 구/카테고리 조합을 백그라운드에서 한 번씩만 로드
+  // 지도 미리보기용 큐레이션 카테고리 배경 선로딩 — 탭/구 선택과 무관하게
+  // 현재 지역의 모든 구를 대상으로 한 번씩만 로드한다.
   useEffect(() => {
-    getFetchTargets(region).forEach(({ district: gu, category: cat }) => {
+    getEagerTargets(region).forEach(({ district: gu, category: cat }) => {
       const key = cacheKeyFor(region, gu, cat);
       if (fetchedKeysRef.current.has(key)) return;
       fetchedKeysRef.current.add(key);
@@ -159,51 +224,46 @@ export default function RecommendedPlaces({
     });
   }, [region]);
 
-  // 실시간 카테고리(카페/실내/야외)는 현재 보고 있는 지역/구 조합만 그때그때 불러온다.
-  // 전체(모든 구) 선택 시에는 구별로 나누지 않고 지역 전체를 한 번에 넓은 반경으로 검색한다.
+  // 실시간 카테고리(카페/실내/야외)는 현재 실제로 보고 있는 구/카테고리 범위만 그때그때 불러온다.
   useEffect(() => {
-    if (!LIVE_CATEGORIES.includes(category)) return;
+    getLiveTargets(region, district, category).forEach(({ district: gu, category: cat }) => {
+      const key = cacheKeyFor(region, gu, cat);
+      if (fetchedKeysRef.current.has(key)) return;
+      fetchedKeysRef.current.add(key);
 
-    const gu = districted && district !== ALL_DISTRICTS ? district : null;
-    const key = cacheKeyFor(region, gu, category);
-    if (fetchedKeysRef.current.has(key)) return;
-    fetchedKeysRef.current.add(key);
+      searchNearby(region, gu, cat)
+        .then((places) => {
+          const withCategory = places.map((p) => ({ ...p, listCategory: cat }));
+          setCache((prev) => ({ ...prev, [key]: [{ area: null, places: withCategory }] }));
+        })
+        .catch((err) => {
+          console.error(err);
+          setErrorKeys((prev) => ({ ...prev, [key]: true }));
+        });
+    });
+  }, [region, district, category]);
 
-    searchNearby(region, gu, category)
-      .then((places) => {
-        const withCategory = places.map((p) => ({ ...p, listCategory: category }));
-        setCache((prev) => ({ ...prev, [key]: [{ area: null, places: withCategory }] }));
-      })
-      .catch((err) => {
-        console.error(err);
-        setErrorKeys((prev) => ({ ...prev, [key]: true }));
-      });
-  }, [region, district, category, districted]);
-
-  // cache가 갱신될 때마다 전 구/카테고리 미리보기 목록을 상위로 전달
+  // cache가 갱신될 때마다 현재 지역의 전 구/카테고리 미리보기 목록을 상위로 전달.
+  // 큐레이션 카테고리는 구별로 저장되므로 모든 구를 순회하고, 실시간 카테고리는
+  // null(지역 전체 검색) 또는 특정 구 키로 저장되므로 둘 다 확인한다.
   useEffect(() => {
     const merged = new Map();
-    getFetchTargets(region).forEach(({ district: gu, category: cat }) => {
-      const groups = cache[cacheKeyFor(region, gu, cat)];
+    const addFrom = (key) => {
+      const groups = cache[key];
       if (!groups) return;
       groups.forEach((group) => {
         group.places.forEach((place) => {
           if (!merged.has(place.id)) merged.set(place.id, place);
         });
       });
+    };
+
+    const guList = allDistrictsOf(region);
+    EAGER_CATEGORY_KEYS.forEach((cat) => {
+      guList.forEach((gu) => addFrom(cacheKeyFor(region, gu, cat)));
     });
-    // 실시간 카테고리는 지역 전체를 미리 훑지 않으므로, 지금 캐시에 있는(=이미 조회해본)
-    // 실시간 카테고리 결과도 함께 미리보기에 포함시킨다.
     LIVE_CATEGORIES.forEach((cat) => {
-      [null, ...(districted ? regionData.__districts : [])].forEach((gu) => {
-        const groups = cache[cacheKeyFor(region, gu, cat)];
-        if (!groups) return;
-        groups.forEach((group) => {
-          group.places.forEach((place) => {
-            if (!merged.has(place.id)) merged.set(place.id, place);
-          });
-        });
-      });
+      [null, ...guList.filter((gu) => gu !== null)].forEach((gu) => addFrom(cacheKeyFor(region, gu, cat)));
     });
     onPreviewPlacesChange(Array.from(merged.values()));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -214,25 +274,14 @@ export default function RecommendedPlaces({
     setDistrict(ALL_DISTRICTS);
   }
 
-  const isLive = LIVE_CATEGORIES.includes(category);
-
-  let groups;
-  let loading;
-  let errorKey;
-  if (districted && district === ALL_DISTRICTS && !isLive) {
-    loading = regionData.__districts.some(
-      (gu) => cache[cacheKeyFor(region, gu, category)] === undefined
-    );
-    groups = buildAllDistrictsGroups(region, regionData.__districts, category, cache);
-    errorKey = cacheKeyFor(region, district, category);
-  } else {
-    const gu = districted && district !== ALL_DISTRICTS ? district : null;
-    const key = cacheKeyFor(region, gu, category);
-    groups = cache[key];
-    loading = !groups && !errorKeys[key];
-    errorKey = key;
-  }
-  const error = errorKeys[errorKey] ? '추천 관광지를 불러오는 중 오류가 발생했습니다.' : null;
+  const { groups, loading, error: hasError } = buildDisplayGroups(
+    region,
+    district,
+    category,
+    cache,
+    errorKeys
+  );
+  const error = hasError ? '추천 관광지를 불러오는 중 오류가 발생했습니다.' : null;
 
   return (
     <div>
@@ -289,7 +338,7 @@ export default function RecommendedPlaces({
       )}
 
       <div className="tab-row category-tab-row">
-        {CATEGORY_KEYS.map((c) => {
+        {CATEGORY_TABS.map((c) => {
           const isActive = category === c;
           const color = colorFor(c);
           return (
@@ -297,11 +346,6 @@ export default function RecommendedPlaces({
               key={c}
               type="button"
               className={`tab-btn category-tab-btn${isActive ? ' active' : ''}`}
-              style={
-                isActive
-                  ? { background: color, borderColor: color, color: '#fff' }
-                  : undefined
-              }
               onClick={() => setCategory(c)}
             >
               <span className="tab-dot" style={{ background: color }} />

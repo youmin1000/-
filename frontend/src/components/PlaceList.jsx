@@ -1,10 +1,144 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { getPlaceDetail, photoUrl } from '../api.js';
 
-function PlaceDetailContent({ place }) {
+// 구글 weekdayDescriptions는 월요일부터 시작하는 배열이라, JS의 getDay()(0=일요일)를
+// 그 인덱스로 맞추려면 6일 밀어줘야 한다.
+function todayIndex() {
+  return (new Date().getDay() + 6) % 7;
+}
+
+function GoogleDetailSection({ loading, error, detail }) {
+  const [showReviews, setShowReviews] = useState(false);
+  const [showHours, setShowHours] = useState(false);
+  const [lightboxName, setLightboxName] = useState(null);
+
+  if (loading) {
+    return <div className="google-detail-status">추가 정보를 불러오는 중...</div>;
+  }
+  // 구글에 없는 업장일 수 있어(특히 소규모 로컬 매장), 실패해도 조용히 숨기고
+  // 기존 카카오 정보만 보여준다 — 별도 에러 배너로 화면을 어지럽히지 않는다.
+  if (error || !detail || !detail.found) return null;
+
+  return (
+    <div className="google-detail">
+      {detail.photoNames.length > 0 && (
+        <div className="google-detail-photos">
+          {detail.photoNames.map((name) => (
+            <img
+              key={name}
+              src={photoUrl(name, 300)}
+              alt=""
+              onClick={() => setLightboxName(name)}
+            />
+          ))}
+        </div>
+      )}
+      {(detail.rating != null || detail.openNow != null) && (
+        <div className="google-detail-meta">
+          {detail.rating != null && (
+            <button
+              type="button"
+              className="google-detail-rating"
+              onClick={() => setShowReviews((v) => !v)}
+              disabled={detail.reviews.length === 0}
+            >
+              ★ {detail.rating.toFixed(1)} ({detail.userRatingCount ?? 0})
+              {detail.reviews.length > 0 && (showReviews ? ' ▲' : ' ▼')}
+            </button>
+          )}
+          {detail.openNow != null && (
+            <span className={`google-detail-open${detail.openNow ? '' : ' closed'}`}>
+              {detail.openNow ? '영업 중' : '영업 종료'}
+            </span>
+          )}
+        </div>
+      )}
+      {detail.weekdayDescriptions.length > 0 && (
+        <div className="google-detail-hours">
+          <button
+            type="button"
+            className="google-detail-hours-toggle"
+            onClick={() => setShowHours((v) => !v)}
+          >
+            <span>영업시간</span>
+            <span className="google-detail-hours-today">
+              {detail.weekdayDescriptions[todayIndex()]}
+            </span>
+            <span className="google-detail-hours-chevron">{showHours ? '▲' : '▼'}</span>
+          </button>
+          {showHours && (
+            <ul className="google-detail-hours-list">
+              {detail.weekdayDescriptions.map((d, i) => {
+                const separatorIndex = d.indexOf(': ');
+                const day = separatorIndex === -1 ? d : d.slice(0, separatorIndex);
+                const time = separatorIndex === -1 ? '' : d.slice(separatorIndex + 2);
+                return (
+                  <li key={d} className={i === todayIndex() ? 'is-today' : ''}>
+                    <span className="google-detail-hours-day">{day}</span>
+                    <span className="google-detail-hours-time">{time}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+      {showReviews && detail.reviews.length > 0 && (
+        <div className="google-detail-reviews">
+          {detail.reviews.map((r, i) => (
+            <div className="google-detail-review" key={i}>
+              <div className="google-detail-review-head">
+                <span className="google-detail-review-author">{r.author}</span>
+                <span className="google-detail-review-rating">★ {r.rating}</span>
+                <span className="google-detail-review-time">{r.relativeTime}</span>
+              </div>
+              <div className="google-detail-review-text">{r.text}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {lightboxName && (
+        <div className="photo-lightbox-backdrop" onClick={() => setLightboxName(null)}>
+          <button type="button" className="photo-lightbox-close" onClick={() => setLightboxName(null)}>
+            ✕
+          </button>
+          <img
+            className="photo-lightbox-img"
+            src={photoUrl(lightboxName, 1200)}
+            alt=""
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlaceDetailContent({ place, isExpanded }) {
   const showLotAddressSeparately = place.lotAddress && place.lotAddress !== place.roadAddress;
+  const [detail, setDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState(null);
+  const fetchedRef = useRef(false);
+
+  // 실제로 펼쳤을 때만, 그리고 장소당 한 번만 구글 상세정보를 가져온다
+  // (모든 목록 항목에 대해 한꺼번에 호출하면 API 사용량이 불필요하게 늘어난다).
+  useEffect(() => {
+    if (!isExpanded || fetchedRef.current) return;
+    fetchedRef.current = true;
+    setDetailLoading(true);
+    getPlaceDetail(place)
+      .then((data) => setDetail(data))
+      .catch((err) => {
+        console.error(err);
+        setDetailError(true);
+      })
+      .finally(() => setDetailLoading(false));
+  }, [isExpanded, place]);
 
   return (
     <div className="place-detail-content">
+      <GoogleDetailSection loading={detailLoading} error={detailError} detail={detail} />
       <div className="detail-row">
         <span className="detail-label">도로명</span>
         <span>{place.roadAddress || place.address || '정보 없음'}</span>
@@ -167,7 +301,7 @@ export default function PlaceList({
             </div>
             <div className={`place-detail-wrap${isExpanded ? ' expanded' : ''}`}>
               <div className="place-detail-inner">
-                <PlaceDetailContent place={place} />
+                <PlaceDetailContent place={place} isExpanded={isExpanded} />
               </div>
             </div>
           </li>

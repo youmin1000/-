@@ -242,22 +242,19 @@ export default function App() {
   function handleShareRoute() {
     if (selectedPlaces.length === 0 && !shareId) return;
 
-    // 이미 공유 중인 링크면(다른 사람이 만든 링크로 들어온 경우 포함) 굳이 매번 네이티브
-    // 공유 시트를 다시 띄우지 않고, 링크/접속인원을 보여주는 패널을 연다.
-    if (shareId) {
-      setShowSharePanel(true);
-      return;
-    }
-
     // navigator.share()는 클릭 이벤트에서 곧바로(동기적으로) 호출해야 브라우저가 "사용자
-    // 제스처"로 인정해 네이티브 공유 시트(카카오톡 등 앱 아이콘 포함)를 띄워준다. 그 앞에
+    // 제스처"로 인정해 네이티브 공유 시트(디바이스에 설치된 앱 목록)를 띄워준다. 그 앞에
     // await로 네트워크 요청을 기다리면 활성화 상태가 풀려 실패하므로, createShare는
     // 서버 저장을 기다리지 않고 shareId를 즉시 동기적으로 돌려주도록 되어 있다.
-    const newShareId = createShare(routeNameInput.trim(), selectedPlaces);
-    // history 변수명이 useSearchHistory()의 검색 기록 배열과 겹치므로 반드시 window.history를 써야 한다.
+    // 이미 공유 중이던 링크여도(다른 사람 링크로 들어온 경우 포함) 매번 다시 네이티브
+    // 공유 시트를 띄운다 — 그게 안 되는 환경(주로 데스크톱)에서만 대체 패널을 연다.
     const url = new URL(window.location.href);
-    url.searchParams.set('share', newShareId);
-    window.history.pushState({}, '', url);
+    if (!shareId) {
+      const newShareId = createShare(routeNameInput.trim(), selectedPlaces);
+      // history 변수명이 useSearchHistory()의 검색 기록 배열과 겹치므로 반드시 window.history를 써야 한다.
+      url.searchParams.set('share', newShareId);
+      window.history.pushState({}, '', url);
+    }
 
     if (navigator.share) {
       navigator

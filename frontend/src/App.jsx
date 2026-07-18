@@ -7,7 +7,6 @@ import KakaoMap from './components/KakaoMap.jsx';
 import RouteDetailPanel from './components/RouteDetailPanel.jsx';
 import FavoriteLists from './components/FavoriteLists.jsx';
 import SavedRoutesPanel from './components/SavedRoutesPanel.jsx';
-import ShareRoutePanel from './components/ShareRoutePanel.jsx';
 import { searchPlaces, getDirections } from './api.js';
 import { useFavorites } from './useFavorites.js';
 import { useSearchHistory } from './useSearchHistory.js';
@@ -113,7 +112,7 @@ export default function App() {
   const [routeError, setRouteError] = useState(null);
   const [showRouteDetail, setShowRouteDetail] = useState(false);
   const [showSavedRoutes, setShowSavedRoutes] = useState(false);
-  const [showSharePanel, setShowSharePanel] = useState(false);
+  const [shareToast, setShareToast] = useState(null);
   const [routeNameInput, setRouteNameInput] = useState('');
   const routeRequestIdRef = useRef(0);
   const isApplyingRemoteRef = useRef(false);
@@ -126,8 +125,6 @@ export default function App() {
     shareId,
     remotePlaces,
     remoteName,
-    connectedCount,
-    loading: shareLoading,
     error: shareError,
     pushUpdate: pushSharedUpdate,
     createShare,
@@ -239,7 +236,11 @@ export default function App() {
     setShowSavedRoutes(false);
   }
 
-  function handleShareRoute() {
+  function handleClearRoute() {
+    setSelectedPlaces([]);
+  }
+
+  async function handleShareRoute() {
     if (selectedPlaces.length === 0 && !shareId) return;
 
     // navigator.share()는 클릭 이벤트에서 곧바로(동기적으로) 호출해야 브라우저가 "사용자
@@ -247,7 +248,7 @@ export default function App() {
     // await로 네트워크 요청을 기다리면 활성화 상태가 풀려 실패하므로, createShare는
     // 서버 저장을 기다리지 않고 shareId를 즉시 동기적으로 돌려주도록 되어 있다.
     // 이미 공유 중이던 링크여도(다른 사람 링크로 들어온 경우 포함) 매번 다시 네이티브
-    // 공유 시트를 띄운다 — 그게 안 되는 환경(주로 데스크톱)에서만 대체 패널을 연다.
+    // 공유 시트를 띄운다 — 그게 안 되는 환경(주로 데스크톱)에서는 링크만 바로 복사한다.
     const url = new URL(window.location.href);
     if (!shareId) {
       const newShareId = createShare(routeNameInput.trim(), selectedPlaces);
@@ -263,13 +264,17 @@ export default function App() {
           text: '같이 보고 수정할 수 있는 여행 동선을 공유합니다',
           url: url.toString(),
         })
-        .catch((err) => {
-          // 사용자가 공유 시트를 취소한 경우 등은 조용히 무시하고, 그 외 실패만 대체 패널로 보여준다.
-          if (err?.name !== 'AbortError') setShowSharePanel(true);
-        });
+        .catch(() => {});
       return;
     }
-    setShowSharePanel(true);
+
+    try {
+      await navigator.clipboard.writeText(url.toString());
+      setShareToast('공유 링크가 복사되었습니다');
+      setTimeout(() => setShareToast(null), 2000);
+    } catch (err) {
+      console.error(err);
+    }
   }
 
   return (
@@ -333,10 +338,18 @@ export default function App() {
         </div>
 
         {error && <div className="error-banner">{error}</div>}
+        {shareError && <div className="error-banner">{shareError}</div>}
 
         <div className="route-card">
-          <div className="section-label">
-            방문 순서 ({selectedPlaces.length}곳 선택됨)
+          <div className="route-card-header">
+            <div className="section-label">
+              방문 순서 ({selectedPlaces.length}곳 선택됨)
+            </div>
+            {selectedPlaces.length > 0 && (
+              <button type="button" className="clear-route-btn" onClick={handleClearRoute}>
+                전체삭제
+              </button>
+            )}
           </div>
           <SelectedRoute
             selectedPlaces={selectedPlaces}
@@ -368,7 +381,7 @@ export default function App() {
               disabled={selectedPlaces.length === 0 && !shareId}
               title={
                 shareId
-                  ? `공유 중 · ${connectedCount}명 접속`
+                  ? '공유 중 (다시 눌러도 공유 가능)'
                   : selectedPlaces.length === 0
                     ? '동선을 먼저 추가해주세요'
                     : '동선 공유하기'
@@ -377,6 +390,7 @@ export default function App() {
               <ShareIcon />
             </button>
           </div>
+          {shareToast && <div className="share-route-toast">{shareToast}</div>}
           <SavedRoutesPanel
             visible={showSavedRoutes}
             onClose={() => setShowSavedRoutes(false)}
@@ -384,15 +398,6 @@ export default function App() {
             onLoadRoute={handleLoadRoute}
             onDeleteRoute={deleteRoute}
             onRenameRoute={renameRoute}
-          />
-          <ShareRoutePanel
-            visible={showSharePanel}
-            onClose={() => setShowSharePanel(false)}
-            shareUrl={shareId ? `${window.location.origin}${window.location.pathname}?share=${shareId}` : ''}
-            routeName={remoteName || routeNameInput}
-            connectedCount={connectedCount}
-            loading={shareLoading}
-            error={shareError}
           />
         </div>
 

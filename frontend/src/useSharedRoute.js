@@ -81,7 +81,10 @@ export function useSharedRoute(initialShareId) {
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'edit', clientId, places, name }));
       } else {
-        updateSharedRoute(shareId, { name, places, clientId }).catch(console.error);
+        updateSharedRoute(shareId, { name, places, clientId }).catch((err) => {
+          console.error(err);
+          setError('변경사항 저장에 실패했습니다. 인터넷 연결을 확인해주세요.');
+        });
       }
     }, PUSH_DEBOUNCE_MS);
   }
@@ -98,7 +101,10 @@ export function useSharedRoute(initialShareId) {
     setRemotePlaces([...places]);
     setRemoteName(name || '');
     setShareId(newShareId);
-    updateSharedRoute(newShareId, { name, places, clientId }).catch(console.error);
+    updateSharedRoute(newShareId, { name, places, clientId }).catch((err) => {
+      console.error(err);
+      setError('공유 동선 저장에 실패했습니다. 다시 공유해주세요.');
+    });
     return newShareId;
   }
 

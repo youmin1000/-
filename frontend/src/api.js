@@ -49,9 +49,21 @@ export async function getSharedRoute(shareId) {
   return data;
 }
 
+// axios(XHR) 대신 fetch keepalive를 쓴다 — navigator.share()로 공유 시트가 뜨면서
+// 페이지가 백그라운드로 전환되면, 일반 XHR/fetch 요청은 완료되기 전에 브라우저가
+// 취소해버릴 수 있다. keepalive:true는 sendBeacon처럼 탭이 전환돼도 요청이 끝까지
+// 전달되도록 브라우저가 보장해준다 (본문 용량이 작은 이 요청엔 문제없다).
 export async function updateSharedRoute(shareId, { name, places, clientId }) {
-  const { data } = await client.put(`/api/routes/shared/${shareId}`, { name, places, clientId });
-  return data;
+  const res = await fetch(`${API_BASE_URL}/api/routes/shared/${shareId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, places, clientId }),
+    keepalive: true,
+  });
+  if (!res.ok) {
+    throw new Error(`공유 동선 저장 실패 (${res.status})`);
+  }
+  return res.json();
 }
 
 // http(s) API_BASE_URL을 같은 호스트의 ws(s) 주소로 바꿔준다 (별도 프론트 env 불필요).

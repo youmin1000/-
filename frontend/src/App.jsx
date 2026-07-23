@@ -283,7 +283,12 @@ export default function App() {
     function handlePointerMove(moveEvent) {
       const { containerLeft } = resizeStateRef.current;
       const rawWidth = moveEvent.clientX - containerLeft;
-      const maxWidth = Math.min(SIDEBAR_MAX_WIDTH, container.clientWidth - MAP_MIN_WIDTH);
+      // 화면이 너무 좁아 (사이드바 최소폭 + 지도 최소폭)을 동시에 만족할 수 없으면
+      // maxWidth가 minWidth보다 작아질 수 있다 — 그 경우도 항상 minWidth를 보장한다.
+      const maxWidth = Math.max(
+        SIDEBAR_MIN_WIDTH,
+        Math.min(SIDEBAR_MAX_WIDTH, container.clientWidth - MAP_MIN_WIDTH)
+      );
       const clamped = Math.min(maxWidth, Math.max(SIDEBAR_MIN_WIDTH, rawWidth));
       setSidebarWidth(clamped);
     }

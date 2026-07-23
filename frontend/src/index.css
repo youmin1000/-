@@ -70,6 +70,32 @@ body {
   box-shadow: 0 8px 28px rgba(70, 110, 190, 0.12);
 }
 
+/* 휴대폰 폭에서는 사이드바(메뉴)와 지도를 좌우로 나눌 공간이 없다
+   (메뉴 최소폭 300 + 지도 최소폭 360을 동시에 만족 불가) — 세로로 쌓고
+   드래그 리사이즈 핸들은 아예 숨긴다. sidebarWidth는 JS state가 인라인
+   style로 강제하므로, 미디어쿼리에서 !important로 덮어써야 실제로 이긴다. */
+@media (max-width: 760px) {
+  .app-layout {
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  .resize-handle {
+    display: none;
+  }
+
+  .sidebar {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-height: 45vh;
+  }
+
+  .map-area {
+    flex: 1;
+    min-height: 200px;
+  }
+}
+
 .sidebar-header {
   position: relative;
   padding: 22px 20px 14px;

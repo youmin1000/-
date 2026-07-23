@@ -394,6 +394,17 @@ body {
   flex: 1;
 }
 
+.app-credit {
+  position: absolute;
+  right: 10px;
+  bottom: 6px;
+  font-size: 10px;
+  color: rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+  z-index: 1;
+  user-select: none;
+}
+
 .settings-gear-btn {
   width: 34px;
   height: 34px;

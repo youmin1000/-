@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { getPlaceDetail, photoUrl } from '../api.js';
+import { colorForDay } from '../dayColors.js';
 
 // 구글 weekdayDescriptions는 월요일부터 시작하는 배열이라, JS의 getDay()(0=일요일)를
 // 그 인덱스로 맞추려면 6일 밀어줘야 한다.
@@ -220,6 +221,8 @@ function FavoriteMenu({ place, lists, onTogglePlaceInList, onCreateList }) {
 export default function PlaceList({
   places,
   selectedIds,
+  dayById,
+  activeDay = 1,
   onToggle,
   expandedId,
   onToggleExpand,
@@ -239,6 +242,10 @@ export default function PlaceList({
     <ul className="place-list">
       {places.map((place) => {
         const isSelected = selectedIds.has(place.id);
+        const existingDay = dayById?.get(place.id);
+        // 이미 선택되어 있지만 "다른" 날짜에 들어있는 경우 — 다시 누르면 삭제가 아니라
+        // 지금 활성화된 날짜로 이동한다는 걸 미리 알려준다.
+        const isInOtherDay = isSelected && existingDay != null && existingDay !== activeDay;
         const isExpanded = expandedId === place.id;
         const isFavorite = favoriteIds?.has(place.id) ?? false;
         const isMenuOpen = openMenuId === place.id;
@@ -289,13 +296,19 @@ export default function PlaceList({
                 )}
                 <button
                   type="button"
-                  className={`select-btn${isSelected ? ' selected' : ''}`}
+                  className={`select-btn${isSelected ? ' selected' : ''}${isInOtherDay ? ' other-day' : ''}`}
+                  style={
+                    isInOtherDay
+                      ? { borderColor: colorForDay(existingDay), color: colorForDay(existingDay) }
+                      : undefined
+                  }
+                  title={isInOtherDay ? `${existingDay}일차에 있음 — 누르면 ${activeDay}일차로 이동` : undefined}
                   onClick={(e) => {
                     e.stopPropagation();
                     onToggle(place);
                   }}
                 >
-                  {isSelected ? '선택됨' : '선택'}
+                  {isInOtherDay ? `${existingDay}일차 · 이동` : isSelected ? '선택됨' : '선택'}
                 </button>
               </div>
             </div>

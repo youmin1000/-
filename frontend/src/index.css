@@ -754,6 +754,23 @@ body {
   color: #fff;
 }
 
+/* 다른 날짜에 이미 들어있는 장소 — 색은 JS에서 해당 일차 색으로 인라인 지정한다. */
+.select-btn.other-day {
+  background: #fff;
+  border-style: dashed;
+  font-weight: 700;
+}
+
+.day-move-toast {
+  margin: 6px 16px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #333;
+  color: #fff;
+  font-size: 12px;
+  text-align: center;
+}
+
 .favorite-btn {
   padding: 4px 8px;
   border: 1px solid #d7d9dd;

@@ -182,6 +182,8 @@ function buildDisplayGroups(region, selectedDistrict, selectedCategory, cache, e
 
 export default function RecommendedPlaces({
   selectedIds,
+  dayById,
+  activeDay,
   onToggle,
   expandedId,
   onToggleExpand,
@@ -370,6 +372,8 @@ export default function RecommendedPlaces({
             <PlaceList
               places={group.places}
               selectedIds={selectedIds}
+              dayById={dayById}
+              activeDay={activeDay}
               onToggle={onToggle}
               expandedId={expandedId}
               onToggleExpand={onToggleExpand}

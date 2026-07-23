@@ -9,6 +9,8 @@ export default function FavoriteLists({
   onDeleteList,
   onRenameList,
   selectedIds,
+  dayById,
+  activeDay,
   onToggle,
   expandedId,
   onToggleExpand,
@@ -45,6 +47,8 @@ export default function FavoriteLists({
         <PlaceList
           places={activeList.places}
           selectedIds={selectedIds}
+          dayById={dayById}
+          activeDay={activeDay}
           onToggle={onToggle}
           expandedId={expandedId}
           onToggleExpand={onToggleExpand}

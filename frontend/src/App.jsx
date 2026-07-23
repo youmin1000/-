@@ -138,6 +138,7 @@ export default function App() {
   const [showRouteDetail, setShowRouteDetail] = useState(false);
   const [showSavedRoutes, setShowSavedRoutes] = useState(false);
   const [shareToast, setShareToast] = useState(null);
+  const [dayMoveToast, setDayMoveToast] = useState(null);
   const [routeNameInput, setRouteNameInput] = useState('');
   const [activeDay, setActiveDay] = useState(1);
   const [sidebarWidth, setSidebarWidth] = useState(380);
@@ -160,6 +161,8 @@ export default function App() {
   } = useSharedRoute(initialShareId);
 
   const selectedIds = new Set(selectedPlaces.map((p) => p.id));
+  // 검색/추천/즐겨찾기 리스트에서 "이 장소가 이미 몇일차에 들어있는지" 보여주기 위한 맵.
+  const dayById = new Map(selectedPlaces.map((p) => [p.id, p.day || 1]));
   const transitColors = buildTransitRouteColors(routeData);
   const dayCount = Math.max(activeDay, ...selectedPlaces.map((p) => p.day || 1), 1);
 
@@ -251,13 +254,29 @@ export default function App() {
     }
   }
 
+  // 이미 다른 날짜에 들어있는 장소를 여기서 또 "선택"하면, 예전엔 그냥 조용히
+  // 삭제돼서 사용자가 "왜 없어졌지?" 하고 당황하기 쉬웠다 — 대신 지금 활성화된
+  // 날짜로 "이동"시키고 토스트로 알려준다. 같은 날짜에서 다시 누르면 기존처럼
+  // 순수 토글(제거)로 동작한다. 이렇게 하면 같은 장소가 두 날짜에 동시에
+  // 들어가는 경우 자체가 구조적으로 생기지 않는다.
   function handleToggle(place) {
+    const existing = selectedPlaces.find((p) => p.id === place.id);
+    if (existing && (existing.day || 1) !== activeDay) {
+      const fromDay = existing.day || 1;
+      setDayMoveToast(`${place.name}을(를) ${fromDay}일차에서 ${activeDay}일차로 옮겼습니다`);
+      setTimeout(() => setDayMoveToast(null), 2500);
+    }
     setSelectedPlaces((prev) => {
-      const exists = prev.some((p) => p.id === place.id);
-      if (exists) {
+      const existingIndex = prev.findIndex((p) => p.id === place.id);
+      if (existingIndex === -1) {
+        return [...prev, { ...place, day: activeDay }];
+      }
+      const prevExisting = prev[existingIndex];
+      if ((prevExisting.day || 1) === activeDay) {
         return prev.filter((p) => p.id !== place.id);
       }
-      return [...prev, { ...place, day: activeDay }];
+      const rest = prev.filter((p) => p.id !== place.id);
+      return [...rest, { ...prevExisting, day: activeDay }];
     });
   }
 
@@ -455,6 +474,7 @@ export default function App() {
               즐겨찾기
             </button>
           </div>
+          {dayMoveToast && <div className="day-move-toast">{dayMoveToast}</div>}
           {activeTab === 'search' && (
             <SearchBar
               onSearch={handleSearch}
@@ -562,6 +582,8 @@ export default function App() {
             <PlaceList
               places={places}
               selectedIds={selectedIds}
+              dayById={dayById}
+              activeDay={activeDay}
               onToggle={handleToggle}
               expandedId={focusPlace?.id ?? null}
               onToggleExpand={handleToggleExpand}
@@ -576,6 +598,8 @@ export default function App() {
         {activeTab === 'recommended' && (
           <RecommendedPlaces
             selectedIds={selectedIds}
+            dayById={dayById}
+            activeDay={activeDay}
             onToggle={handleToggle}
             expandedId={focusPlace?.id ?? null}
             onToggleExpand={handleToggleExpand}
@@ -598,6 +622,8 @@ export default function App() {
             onDeleteList={deleteList}
             onRenameList={renameList}
             selectedIds={selectedIds}
+            dayById={dayById}
+            activeDay={activeDay}
             onToggle={handleToggle}
             expandedId={focusPlace?.id ?? null}
             onToggleExpand={handleToggleExpand}

@@ -12,14 +12,35 @@ body {
 
 .app-layout {
   display: flex;
-  gap: 16px;
   height: 100vh;
   padding: 16px;
 }
 
+.resize-handle {
+  flex-shrink: 0;
+  width: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.resize-handle-grip {
+  width: 4px;
+  height: 44px;
+  border-radius: 999px;
+  background: rgba(70, 110, 190, 0.18);
+  transition: background 0.15s ease;
+}
+
+.resize-handle:hover .resize-handle-grip,
+.resize-handle:active .resize-handle-grip {
+  background: rgba(70, 110, 190, 0.5);
+}
+
 .sidebar {
-  width: 380px;
-  min-width: 380px;
+  flex-shrink: 0;
   height: 100%;
   overflow-y: auto;
   background: #fff;

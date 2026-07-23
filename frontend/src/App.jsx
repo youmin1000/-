@@ -18,6 +18,13 @@ import { colorForDay } from './dayColors.js';
 const DEFAULT_SEGMENT_COLOR = '#3b6ef6';
 const WALK_SEGMENT_COLOR = '#9aa0a6';
 
+// 사이드바(메뉴)를 드래그로 늘리고 줄일 때의 한계값.
+// 너무 좁아지면 category-tab-row 등 내부 필(pill) 버튼들의 줄바꿈이 잦아져 비율이
+// 무너지고, 너무 넓어지면 지도가 안 보일 정도로 줄어들 수 있어 양쪽 다 막아둔다.
+const SIDEBAR_MIN_WIDTH = 300;
+const SIDEBAR_MAX_WIDTH = 640;
+const MAP_MIN_WIDTH = 360;
+
 // TMAP/ODsay가 주는 공식 노선 색상은 지역에 따라 비어있는 경우가 많아(예: 대구),
 // 그 값에 의존하지 않고 이 앱이 직접 노선마다 구분되는 색을 순서대로 배정한다.
 const TRANSIT_PALETTE = [
@@ -129,8 +136,10 @@ export default function App() {
   const [shareToast, setShareToast] = useState(null);
   const [routeNameInput, setRouteNameInput] = useState('');
   const [activeDay, setActiveDay] = useState(1);
+  const [sidebarWidth, setSidebarWidth] = useState(380);
   const routeRequestIdRef = useRef(0);
   const isApplyingRemoteRef = useRef(false);
+  const resizeStateRef = useRef(null);
   const { lists, favoriteIds, createList, deleteList, renameList, togglePlaceInList } = useFavorites();
   const { history, addToHistory, removeFromHistory, enabled: historyEnabled, toggleEnabled: toggleHistoryEnabled } =
     useSearchHistory();
@@ -262,6 +271,35 @@ export default function App() {
     setActiveDay(day);
   }
 
+  // 사이드바 폭 드래그 조절: 마우스/터치를 pointer 이벤트 하나로 함께 처리한다.
+  // 핸들을 누른 시점의 컨테이너 기준 좌표를 저장해두고, 이후 pointermove마다
+  // "핸들 왼쪽 끝까지의 거리"를 폭으로 환산한 뒤 min/max로 잘라낸다.
+  function handleResizeStart(e) {
+    e.preventDefault();
+    const container = e.currentTarget.parentElement;
+    if (!container) return;
+    resizeStateRef.current = { containerLeft: container.getBoundingClientRect().left };
+
+    function handlePointerMove(moveEvent) {
+      const { containerLeft } = resizeStateRef.current;
+      const rawWidth = moveEvent.clientX - containerLeft;
+      const maxWidth = Math.min(SIDEBAR_MAX_WIDTH, container.clientWidth - MAP_MIN_WIDTH);
+      const clamped = Math.min(maxWidth, Math.max(SIDEBAR_MIN_WIDTH, rawWidth));
+      setSidebarWidth(clamped);
+    }
+
+    function handlePointerEnd() {
+      resizeStateRef.current = null;
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerEnd);
+      window.removeEventListener('pointercancel', handlePointerEnd);
+    }
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerEnd);
+    window.addEventListener('pointercancel', handlePointerEnd);
+  }
+
   function handleToggleExpand(place) {
     setFocusPlace((prev) => (prev?.id === place.id ? null : place));
   }
@@ -323,7 +361,7 @@ export default function App() {
 
   return (
     <div className="app-layout">
-      <aside className="sidebar">
+      <aside className="sidebar" style={{ width: sidebarWidth, minWidth: sidebarWidth }}>
         <div className="sidebar-header">
           <svg className="hero-route-deco" viewBox="0 0 140 90" fill="none" xmlns="http://www.w3.org/2000/svg">
             <circle cx="20" cy="70" r="13" stroke="currentColor" strokeWidth="1.5" strokeDasharray="1 6" strokeLinecap="round" />
@@ -517,6 +555,16 @@ export default function App() {
           />
         )}
       </aside>
+
+      <div
+        className="resize-handle"
+        onPointerDown={handleResizeStart}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="메뉴 폭 조절"
+      >
+        <span className="resize-handle-grip" />
+      </div>
 
       <main className="map-area">
         <KakaoMap

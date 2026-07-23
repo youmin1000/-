@@ -223,6 +223,14 @@ export default function App() {
       return;
     }
     if (!shareId) return;
+    // 공유 링크로 막 들어온 직후엔 selectedPlaces가 초기값 []이고 아직 서버의 실제
+    // 동선(remotePlaces)을 한 번도 못 받은 상태다 — 이때 이 effect가 그대로 실행되면
+    // "사용자가 동선을 다 지웠다"고 오인해 빈 배열을 서버에 저장해버리고, 그 직후
+    // remotePlaces가 도착해 화면엔 실제 동선이 잠깐 보이지만 결국 그 빈 배열 저장이
+    // 뒤늦게 서버 데이터를 덮어써서 "떴다가 사라지는" 현상 + 이후 모두에게 빈 동선만
+    // 보이는 영구적인 데이터 손실로 이어진다. remotePlaces를 최소 한 번 받기 전까지는
+    // 푸시를 건너뛴다.
+    if (remotePlaces === null) return;
     pushSharedUpdate(selectedPlaces, remoteName);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPlaces]);

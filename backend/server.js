@@ -797,7 +797,10 @@ wss.on('connection', (ws, req) => {
     } catch {
       return;
     }
-    if (msg.type !== 'edit' || !Array.isArray(msg.places)) return;
+    // REST PUT과 동일한 규칙: 빈 places 배열은 저장하지 않는다. 클라이언트 쪽 버그로
+    // "아직 로딩 중"이 "사용자가 다 지움"으로 오인되는 경우가 있었는데, 그런 값이
+    // 와도 서버가 방어적으로 막아 공유 동선이 통째로 사라지는 사고를 이중으로 예방한다.
+    if (msg.type !== 'edit' || !Array.isArray(msg.places) || msg.places.length === 0) return;
 
     try {
       await persistAndBroadcastSharedRoute(shareId, { name: msg.name, places: msg.places, clientId: msg.clientId });

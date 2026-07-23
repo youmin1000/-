@@ -203,6 +203,49 @@ body {
   padding: 10px 16px 2px;
 }
 
+.day-tab-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 14px 6px;
+}
+
+.day-tab-btn {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 999px;
+  background: #fff;
+  border: 1.5px solid;
+  cursor: pointer;
+}
+
+.day-tab-btn.active {
+  color: #fff;
+}
+
+.day-tab-add-btn {
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  border: 1.5px dashed #b7c2d6;
+  background: none;
+  color: #6a7c99;
+  cursor: pointer;
+}
+
+.day-tab-add-btn:hover {
+  background: #eef5fe;
+}
+
+.day-group-header {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 10px 16px 2px;
+}
+
 .place-note {
   font-size: 11px;
   color: #3b6ef6;

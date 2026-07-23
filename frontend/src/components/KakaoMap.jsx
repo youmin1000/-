@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { loadKakaoMaps } from '../loadKakaoMaps.js';
 import { colorFor } from '../categoryColors.js';
+import { colorForDay } from '../dayColors.js';
+import { groupPlacesByDay } from '../groupByDay.js';
 import { formatDistance, formatDuration } from '../formatRoute.js';
 
 const DEFAULT_CENTER = { lat: 37.5665, lng: 126.978 }; // 서울시청 기본 좌표
@@ -22,16 +24,16 @@ function haversineKm(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function buildSelectedPinContent(place, index) {
+function buildSelectedPinContent(place, dayIndex, day) {
   const content = document.createElement('div');
   content.className = 'kmap-pin-wrap';
 
   const pin = document.createElement('div');
   pin.className = 'kmap-pin';
-  pin.style.background = colorFor(place.listCategory);
+  pin.style.background = colorForDay(day);
   const badge = document.createElement('span');
   badge.className = 'kmap-pin-badge';
-  badge.textContent = String(index + 1);
+  badge.textContent = String(dayIndex);
   pin.appendChild(badge);
 
   const label = document.createElement('div');
@@ -187,21 +189,23 @@ export default function KakaoMap({
 
     const bounds = new kakao.maps.LatLngBounds();
 
-    selectedPlaces.forEach((place, index) => {
-      const position = new kakao.maps.LatLng(place.lat, place.lng);
-      const content = buildSelectedPinContent(place, index);
+    groupPlacesByDay(selectedPlaces).forEach(({ day, items }) => {
+      items.forEach(({ place, dayIndex }) => {
+        const position = new kakao.maps.LatLng(place.lat, place.lng);
+        const content = buildSelectedPinContent(place, dayIndex, day);
 
-      const overlay = new kakao.maps.CustomOverlay({
-        position,
-        content,
-        yAnchor: 0.72,
-        xAnchor: 0.5,
-        zIndex: 10,
+        const overlay = new kakao.maps.CustomOverlay({
+          position,
+          content,
+          yAnchor: 0.72,
+          xAnchor: 0.5,
+          zIndex: 10,
+        });
+        overlay.setMap(map);
+
+        markersRef.current.push(overlay);
+        bounds.extend(position);
       });
-      overlay.setMap(map);
-
-      markersRef.current.push(overlay);
-      bounds.extend(position);
     });
 
     map.setBounds(bounds);

@@ -12,6 +12,8 @@ import { useFavorites } from './useFavorites.js';
 import { useSearchHistory } from './useSearchHistory.js';
 import { useSavedRoutes } from './useSavedRoutes.js';
 import { useSharedRoute } from './useSharedRoute.js';
+import { groupPlacesByDay } from './groupByDay.js';
+import { colorForDay } from './dayColors.js';
 
 const DEFAULT_SEGMENT_COLOR = '#3b6ef6';
 const WALK_SEGMENT_COLOR = '#9aa0a6';
@@ -77,22 +79,33 @@ function ShareIcon({ size = 16 }) {
   );
 }
 
-function buildRouteSegments(routeData, mode, transitColors) {
-  if (!routeData) return null;
+// 일차별로 따로 계산된 경로 결과들을 지도에 그릴 세그먼트 목록으로 바꾼다.
+// 자동차/도보는 일차마다 세그먼트 하나(그 일차의 색), 대중교통은 기존처럼 노선별
+// 색상을 쓰되 일차마다 나눠 계산한 걸 이어붙인다 — 일차 경계에 이어지는 선이 안 생긴다.
+function buildRouteSegments(routeResultsByDay, mode, transitColors) {
+  if (!routeResultsByDay || routeResultsByDay.length === 0) return null;
 
-  if (mode !== 'transit') {
-    return routeData.path && routeData.path.length > 0
-      ? [{ path: routeData.path, color: DEFAULT_SEGMENT_COLOR }]
-      : null;
-  }
+  const segments = [];
+  routeResultsByDay.forEach(({ day, data }) => {
+    if (!data) return;
 
-  const segments = (routeData.legs || [])
-    .flatMap((leg) => leg.steps || [])
-    .filter((step) => step.path && step.path.length > 0)
-    .map((step) => ({
-      path: step.path,
-      color: step.mode === 'WALK' ? WALK_SEGMENT_COLOR : transitColors[transitRouteKey(step)] || DEFAULT_SEGMENT_COLOR,
-    }));
+    if (mode !== 'transit') {
+      if (data.path && data.path.length > 0) {
+        segments.push({ path: data.path, color: colorForDay(day) });
+      }
+      return;
+    }
+
+    (data.legs || [])
+      .flatMap((leg) => leg.steps || [])
+      .filter((step) => step.path && step.path.length > 0)
+      .forEach((step) => {
+        segments.push({
+          path: step.path,
+          color: step.mode === 'WALK' ? WALK_SEGMENT_COLOR : transitColors[transitRouteKey(step)] || DEFAULT_SEGMENT_COLOR,
+        });
+      });
+  });
 
   return segments.length > 0 ? segments : null;
 }
@@ -108,12 +121,14 @@ export default function App() {
   const [focusPlace, setFocusPlace] = useState(null);
   const [routeMode, setRouteMode] = useState('car');
   const [routeData, setRouteData] = useState(null);
+  const [routeResultsByDay, setRouteResultsByDay] = useState([]);
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState(null);
   const [showRouteDetail, setShowRouteDetail] = useState(false);
   const [showSavedRoutes, setShowSavedRoutes] = useState(false);
   const [shareToast, setShareToast] = useState(null);
   const [routeNameInput, setRouteNameInput] = useState('');
+  const [activeDay, setActiveDay] = useState(1);
   const routeRequestIdRef = useRef(0);
   const isApplyingRemoteRef = useRef(false);
   const { lists, favoriteIds, createList, deleteList, renameList, togglePlaceInList } = useFavorites();
@@ -132,13 +147,17 @@ export default function App() {
 
   const selectedIds = new Set(selectedPlaces.map((p) => p.id));
   const transitColors = buildTransitRouteColors(routeData);
+  const dayCount = Math.max(activeDay, ...selectedPlaces.map((p) => p.day || 1), 1);
 
-  // 방문 순서 또는 이동수단이 바뀔 때마다 경로(거리/시간/상세 안내)를 다시 계산
+  // 방문 순서 또는 이동수단이 바뀔 때마다 경로(거리/시간/상세 안내)를 다시 계산.
+  // 일차 경계를 넘나드는 가짜 연결선이 생기지 않도록, 일차마다 따로(병렬로) 경로를 구한다.
   useEffect(() => {
     const requestId = ++routeRequestIdRef.current;
+    const routableDays = groupPlacesByDay(selectedPlaces).filter((g) => g.items.length >= 2);
 
-    if (selectedPlaces.length < 2) {
+    if (routableDays.length === 0) {
       setRouteData(null);
+      setRouteResultsByDay([]);
       setRouteError(null);
       setRouteLoading(false);
       return;
@@ -147,15 +166,27 @@ export default function App() {
     setRouteLoading(true);
     setRouteError(null);
 
-    getDirections(selectedPlaces, routeMode)
-      .then((data) => {
+    Promise.all(
+      routableDays.map((group) =>
+        getDirections(group.items.map((i) => i.place), routeMode).then((data) => ({ day: group.day, data }))
+      )
+    )
+      .then((results) => {
         if (routeRequestIdRef.current !== requestId) return;
-        setRouteData(data);
+        const hasFare = results.some((r) => r.data.fareWon != null);
+        setRouteData({
+          distanceMeters: results.reduce((sum, r) => sum + r.data.distanceMeters, 0),
+          durationSeconds: results.reduce((sum, r) => sum + r.data.durationSeconds, 0),
+          legs: results.flatMap((r) => r.data.legs),
+          ...(hasFare ? { fareWon: results.reduce((sum, r) => sum + (r.data.fareWon || 0), 0) } : {}),
+        });
+        setRouteResultsByDay(results);
       })
       .catch((err) => {
         if (routeRequestIdRef.current !== requestId) return;
         console.error(err);
         setRouteData(null);
+        setRouteResultsByDay([]);
         setRouteError(err.response?.data?.error || '경로를 불러오지 못했습니다.');
       })
       .finally(() => {
@@ -168,6 +199,7 @@ export default function App() {
     if (remotePlaces === null) return;
     isApplyingRemoteRef.current = true;
     setSelectedPlaces(remotePlaces);
+    setActiveDay(Math.max(1, ...remotePlaces.map((p) => p.day || 1)));
   }, [remotePlaces]);
 
   // selectedPlaces가 바뀔 때마다, 공유 중이면 (원격에서 온 변경이 아닌 한) 서버로 되돌려 보낸다.
@@ -203,7 +235,7 @@ export default function App() {
       if (exists) {
         return prev.filter((p) => p.id !== place.id);
       }
-      return [...prev, place];
+      return [...prev, { ...place, day: activeDay }];
     });
   }
 
@@ -211,13 +243,23 @@ export default function App() {
     setSelectedPlaces((prev) => prev.filter((p) => p.id !== placeId));
   }
 
+  // 일차 내 순서 이동은 (다른 날 탭으로 갔다가 되돌아와 추가한 경우) 두 항목이 전역
+  // 배열에서 서로 인접하지 않을 수 있어, 두 인덱스를 그대로 맞바꾼다(스플라이스 아님) —
+  // 그래야 그 사이에 있는 다른 일차의 상대 순서가 흐트러지지 않는다.
   function handleMove(fromIndex, toIndex) {
     setSelectedPlaces((prev) => {
       const next = [...prev];
-      const [moved] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, moved);
+      [next[fromIndex], next[toIndex]] = [next[toIndex], next[fromIndex]];
       return next;
     });
+  }
+
+  function handleAddDay() {
+    setActiveDay((d) => d + 1);
+  }
+
+  function handleSelectDay(day) {
+    setActiveDay(day);
   }
 
   function handleToggleExpand(place) {
@@ -233,11 +275,13 @@ export default function App() {
 
   function handleLoadRoute(route) {
     setSelectedPlaces(route.places);
+    setActiveDay(Math.max(1, ...route.places.map((p) => p.day || 1)));
     setShowSavedRoutes(false);
   }
 
   function handleClearRoute() {
     setSelectedPlaces([]);
+    setActiveDay(1);
   }
 
   async function handleShareRoute() {
@@ -355,6 +399,10 @@ export default function App() {
             selectedPlaces={selectedPlaces}
             onRemove={handleRemove}
             onMove={handleMove}
+            activeDay={activeDay}
+            dayCount={dayCount}
+            onSelectDay={handleSelectDay}
+            onAddDay={handleAddDay}
           />
         </div>
 
@@ -479,7 +527,7 @@ export default function App() {
           focusPlace={focusPlace}
           routeMode={routeMode}
           onRouteModeChange={setRouteMode}
-          routeSegments={buildRouteSegments(routeData, routeMode, transitColors)}
+          routeSegments={buildRouteSegments(routeResultsByDay, routeMode, transitColors)}
           routeLoading={routeLoading}
           routeInfo={
             routeData

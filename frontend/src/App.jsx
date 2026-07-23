@@ -25,6 +25,10 @@ const SIDEBAR_MIN_WIDTH = 300;
 const SIDEBAR_MAX_WIDTH = 640;
 const MAP_MIN_WIDTH = 360;
 
+// 모바일(세로 스택 레이아웃)에서는 폭 대신 높이를 드래그로 조절한다.
+const MOBILE_SIDEBAR_MIN_HEIGHT = 160;
+const MOBILE_MAP_MIN_HEIGHT = 160;
+
 // TMAP/ODsay가 주는 공식 노선 색상은 지역에 따라 비어있는 경우가 많아(예: 대구),
 // 그 값에 의존하지 않고 이 앱이 직접 노선마다 구분되는 색을 순서대로 배정한다.
 const TRANSIT_PALETTE = [
@@ -137,6 +141,7 @@ export default function App() {
   const [routeNameInput, setRouteNameInput] = useState('');
   const [activeDay, setActiveDay] = useState(1);
   const [sidebarWidth, setSidebarWidth] = useState(380);
+  const [sidebarHeight, setSidebarHeight] = useState(() => Math.round(window.innerHeight * 0.45));
   const routeRequestIdRef = useRef(0);
   const isApplyingRemoteRef = useRef(false);
   const resizeStateRef = useRef(null);
@@ -305,6 +310,34 @@ export default function App() {
     window.addEventListener('pointercancel', handlePointerEnd);
   }
 
+  // 모바일 세로 스택 레이아웃에서 메뉴 높이를 드래그로 조절 — 위 핸들러와 축만 다르다.
+  function handleVerticalResizeStart(e) {
+    e.preventDefault();
+    const container = e.currentTarget.parentElement;
+    if (!container) return;
+    const containerTop = container.getBoundingClientRect().top;
+
+    function handlePointerMove(moveEvent) {
+      const rawHeight = moveEvent.clientY - containerTop;
+      const maxHeight = Math.max(
+        MOBILE_SIDEBAR_MIN_HEIGHT,
+        Math.min(container.clientHeight * 0.75, container.clientHeight - MOBILE_MAP_MIN_HEIGHT)
+      );
+      const clamped = Math.min(maxHeight, Math.max(MOBILE_SIDEBAR_MIN_HEIGHT, rawHeight));
+      setSidebarHeight(clamped);
+    }
+
+    function handlePointerEnd() {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerEnd);
+      window.removeEventListener('pointercancel', handlePointerEnd);
+    }
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerEnd);
+    window.addEventListener('pointercancel', handlePointerEnd);
+  }
+
   function handleToggleExpand(place) {
     setFocusPlace((prev) => (prev?.id === place.id ? null : place));
   }
@@ -366,7 +399,10 @@ export default function App() {
 
   return (
     <div className="app-layout">
-      <aside className="sidebar" style={{ width: sidebarWidth, minWidth: sidebarWidth }}>
+      <aside
+        className="sidebar"
+        style={{ width: sidebarWidth, minWidth: sidebarWidth, '--sidebar-height': `${sidebarHeight}px` }}
+      >
         <div className="sidebar-header">
           <svg className="hero-route-deco" viewBox="0 0 140 90" fill="none" xmlns="http://www.w3.org/2000/svg">
             <circle cx="20" cy="70" r="13" stroke="currentColor" strokeWidth="1.5" strokeDasharray="1 6" strokeLinecap="round" />
@@ -569,6 +605,16 @@ export default function App() {
         aria-label="메뉴 폭 조절"
       >
         <span className="resize-handle-grip" />
+      </div>
+
+      <div
+        className="resize-handle-horizontal"
+        onPointerDown={handleVerticalResizeStart}
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="메뉴 높이 조절"
+      >
+        <span className="resize-handle-grip-horizontal" />
       </div>
 
       <main className="map-area">

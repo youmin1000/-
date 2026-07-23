@@ -39,6 +39,25 @@ body {
   background: rgba(70, 110, 190, 0.5);
 }
 
+/* 모바일 세로 스택 전용 위/아래 드래그 핸들 — 데스크톱(가로 분할)에서는 숨겨두고
+   760px 이하 미디어쿼리에서만 보여준다. */
+.resize-handle-horizontal {
+  display: none;
+}
+
+.resize-handle-grip-horizontal {
+  width: 44px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(70, 110, 190, 0.18);
+  transition: background 0.15s ease;
+}
+
+.resize-handle-horizontal:hover .resize-handle-grip-horizontal,
+.resize-handle-horizontal:active .resize-handle-grip-horizontal {
+  background: rgba(70, 110, 190, 0.5);
+}
+
 .sidebar {
   flex-shrink: 0;
   height: 100%;
@@ -72,8 +91,10 @@ body {
 
 /* 휴대폰 폭에서는 사이드바(메뉴)와 지도를 좌우로 나눌 공간이 없다
    (메뉴 최소폭 300 + 지도 최소폭 360을 동시에 만족 불가) — 세로로 쌓고
-   드래그 리사이즈 핸들은 아예 숨긴다. sidebarWidth는 JS state가 인라인
-   style로 강제하므로, 미디어쿼리에서 !important로 덮어써야 실제로 이긴다. */
+   좌우 리사이즈 핸들은 숨긴 뒤 위/아래 핸들로 교체한다. sidebarWidth는 JS state가
+   인라인 style로 강제하므로, 미디어쿼리에서 !important로 덮어써야 실제로 이긴다.
+   높이는 반대로 인라인에 직접 넣지 않고 --sidebar-height 커스텀 프로퍼티로만 넘겨서,
+   이 미디어쿼리의 일반 height 선언이 그대로 적용되도록 한다(특이도 충돌 없음). */
 @media (max-width: 760px) {
   .app-layout {
     flex-direction: column;
@@ -84,15 +105,26 @@ body {
     display: none;
   }
 
+  .resize-handle-horizontal {
+    display: flex;
+    width: 100%;
+    height: 16px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    cursor: row-resize;
+    touch-action: none;
+  }
+
   .sidebar {
     width: 100% !important;
     min-width: 0 !important;
-    max-height: 45vh;
+    height: var(--sidebar-height, 45vh);
   }
 
   .map-area {
     flex: 1;
-    min-height: 200px;
+    min-height: 160px;
   }
 }
 
